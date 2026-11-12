@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="CareLink.API/CareLink.API.csproj" />
+  <Project Path="CareLink.Application/CareLink.Application.csproj" />
+  <Project Path="CareLink.Core/CareLink.Core.csproj" />
+  <Project Path="CareLink.Infrastructure/CareLink.Infrastructure.csproj" />
+</Solution>

@@ -1,0 +1,15 @@
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\bin\Debug\net10.0\CareLink.Application.deps.json
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\bin\Debug\net10.0\CareLink.Application.dll
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\bin\Debug\net10.0\CareLink.Application.pdb
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\bin\Debug\net10.0\CareLink.Core.dll
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\bin\Debug\net10.0\CareLink.Core.pdb
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\obj\Debug\net10.0\CareLink.Application.csproj.AssemblyReference.cache
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\obj\Debug\net10.0\CareLink.Application.GeneratedMSBuildEditorConfig.editorconfig
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\obj\Debug\net10.0\CareLink.Application.AssemblyInfoInputs.cache
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\obj\Debug\net10.0\CareLink.Application.AssemblyInfo.cs
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\obj\Debug\net10.0\CareLink.Application.csproj.CoreCompileInputs.cache
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\obj\Debug\net10.0\CareLink.F68F7A3E.Up2Date
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\obj\Debug\net10.0\CareLink.Application.dll
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\obj\Debug\net10.0\refint\CareLink.Application.dll
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\obj\Debug\net10.0\CareLink.Application.pdb
+D:\NSBM\SA-Project\careLink-backend\CareLink.Application\obj\Debug\net10.0\ref\CareLink.Application.dll
