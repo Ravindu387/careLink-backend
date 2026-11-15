@@ -1,0 +1,30 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Build output
+[Bb]in/
+[Oo]bj/
+**/bin/
+**/obj/
+
+# User-specific files
+*.userosscache
+*.sln.docstates
+
+# IDE files
+.idea/
+.vscode/
+
+# Diagnostic logs
+build_inf_diag.txt
+restore_err.txt
+build_norm.txt
+
+# Local NuGet configuration
+nuget.config
+
+# Local environment settings & secrets
+**/appsettings.Development.json
+*.local.json
