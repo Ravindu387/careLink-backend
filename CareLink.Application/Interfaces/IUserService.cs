@@ -12,4 +12,6 @@ public interface IUserService
     Task<ApiResponse<UserDetailsDto>> UpdateUserAsync(string id, UpdateUserRequestDto request);
     Task<ApiResponse<bool>> UpdateUserStatusAsync(string id, bool isActive);
     Task<ApiResponse<bool>> DeleteUserAsync(string id);
+    Task<ApiResponse<bool>> UpdateUserRolesAsync(string userId, CareLink.Application.DTOs.Roles.UpdateUserRolesRequestDto request);
+    Task<ApiResponse<IReadOnlyList<string>>> GetUserPermissionsAsync(string userId);
 }
