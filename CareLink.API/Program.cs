@@ -1,11 +1,14 @@
 using System.Text;
+using CareLink.API.Authorization;
 using CareLink.Application.Interfaces;
 using CareLink.Application.Services;
+using CareLink.Core.Constants;
 using CareLink.Core.Entities;
 using CareLink.Core.Interfaces;
 using CareLink.Infrastructure.Data;
 using CareLink.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -22,8 +25,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // 2. Configure ASP.NET Core Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
-    options.Password.RequireDigit = true;
-    options.Password.RequireLowercase = true;
+    options.Password.RequireDigit = false;
+    options.Password.RequireLowercase = false;
     options.Password.RequireUppercase = false;
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequiredLength = 6;
@@ -59,15 +62,56 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
         ClockSkew = TimeSpan.Zero
     };
+    options.Events = new JwtBearerEvents
+    {
+        OnChallenge = context =>
+        {
+            context.HandleResponse();
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            context.Response.ContentType = "application/json";
+            var result = CareLink.Application.Common.ApiResponse<object>.FailureResult(
+                "Authentication required. Please sign in.");
+            return context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(result));
+        },
+        OnForbidden = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "application/json";
+            var result = CareLink.Application.Common.ApiResponse<object>.FailureResult(
+                "Access denied. Your assigned role does not have permission to access this resource.");
+            return context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(result));
+        }
+    };
 });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    foreach (var permission in Permissions.All)
+    {
+        options.AddPolicy(permission, policy =>
+            policy.Requirements.Add(new PermissionRequirement(permission)));
+    }
+});
+
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 // 4. Register Application & Infrastructure Services (Dependency Injection)
+builder.Services.Configure<CareLink.Application.Common.EmailSettings>(
+    builder.Configuration.GetSection(CareLink.Application.Common.EmailSettings.SectionName));
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IIntegrationHealthService, IntegrationHealthService>();
+builder.Services.AddSingleton<IAiRecommendationService, AiRecommendationService>();
+builder.Services.AddSingleton<ISecurityEventService, SecurityEventService>();
+builder.Services.AddSingleton<IAuditLogService, AuditLogService>();
+builder.Services.AddSingleton<IVerificationService, VerificationService>();
+builder.Services.AddSingleton<INotificationService, NotificationService>();
+builder.Services.AddScoped<IReportService, ReportService>();
 
 // 5. Register Controllers & OpenAPI Documentation
 builder.Services.AddControllers();
