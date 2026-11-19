@@ -112,6 +112,10 @@ builder.Services.AddSingleton<IAuditLogService, AuditLogService>();
 builder.Services.AddSingleton<IVerificationService, VerificationService>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IOrganizationService, OrganizationService>();
+builder.Services.AddSingleton<IAssistanceRequestService, AssistanceRequestService>();
+builder.Services.AddSingleton<ISettingsService, SettingsService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 
 // 5. Register Controllers & OpenAPI Documentation
 builder.Services.AddControllers();
