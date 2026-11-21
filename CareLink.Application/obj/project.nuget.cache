@@ -1,8 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "aJT27oOADfg=",
+  "dgSpecHash": "rAKL65dnPjk=",
   "success": true,
-  "projectFilePath": "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Application\\CareLink.Application.csproj",
-  "expectedPackageFiles": [],
+  "projectFilePath": "C:\\Users\\My PC\\Desktop\\CareLink\\careLink-backend\\CareLink.Application\\CareLink.Application.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\My PC\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\11.0.0\\microsoft.extensions.dependencyinjection.abstractions.11.0.0.nupkg.sha512"
+  ],
   "logs": []
 }
