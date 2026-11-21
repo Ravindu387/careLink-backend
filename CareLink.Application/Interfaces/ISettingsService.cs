@@ -1,0 +1,26 @@
+using CareLink.Application.DTOs;
+
+namespace CareLink.Application.Interfaces;
+
+public interface ISettingsService
+{
+    // Coordinator Settings
+    Task<CoordinatorSettingsDto> GetCoordinatorSettingsAsync(CancellationToken cancellationToken = default);
+    Task<CoordinatorProfileSettingsDto> UpdateCoordinatorProfileAsync(UpdateCoordinatorProfileSettingsDto dto, CancellationToken cancellationToken = default);
+    Task<CoordinatorOperationalSettingsDto> UpdateCoordinatorOperationalAsync(UpdateCoordinatorOperationalSettingsDto dto, CancellationToken cancellationToken = default);
+    Task<CoordinatorNotificationSettingsDto> UpdateCoordinatorNotificationsAsync(UpdateCoordinatorNotificationSettingsDto dto, CancellationToken cancellationToken = default);
+    Task<ChangePasswordResponseDto> ChangeCoordinatorPasswordAsync(ChangePasswordRequestDto dto, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<UserSessionDto>> GetCoordinatorSessionsAsync(CancellationToken cancellationToken = default);
+    Task<bool> RevokeSessionAsync(string sessionId, CancellationToken cancellationToken = default);
+    Task<CoordinatorSettingsDto> ResetCoordinatorSettingsAsync(CancellationToken cancellationToken = default);
+
+    // Partner Officer Settings
+    Task<PartnerSettingsDto> GetPartnerSettingsAsync(CancellationToken cancellationToken = default);
+    Task<PartnerProfileSettingsDto> UpdatePartnerProfileAsync(UpdatePartnerProfileSettingsDto dto, CancellationToken cancellationToken = default);
+    Task<PartnerOrganisationSettingsDto> UpdatePartnerOrganisationAsync(UpdatePartnerOrganisationSettingsDto dto, CancellationToken cancellationToken = default);
+    Task<PartnerSharingSettingsDto> UpdatePartnerSharingAsync(UpdatePartnerSharingSettingsDto dto, CancellationToken cancellationToken = default);
+    Task<PartnerNotificationSettingsDto> UpdatePartnerNotificationsAsync(UpdatePartnerNotificationSettingsDto dto, CancellationToken cancellationToken = default);
+    Task<PartnerSecuritySettingsDto> UpdatePartnerSecurityAsync(UpdatePartnerSecuritySettingsDto dto, CancellationToken cancellationToken = default);
+    Task<ChangePasswordResponseDto> ChangePartnerPasswordAsync(ChangePasswordRequestDto dto, CancellationToken cancellationToken = default);
+    Task<PartnerSettingsDto> ResetPartnerSettingsAsync(CancellationToken cancellationToken = default);
+}
