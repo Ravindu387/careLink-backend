@@ -9,3 +9,15 @@ D:\NSBM\SA-Project\careLink-backend\CareLink.Core\obj\Debug\net10.0\CareLink.Cor
 D:\NSBM\SA-Project\careLink-backend\CareLink.Core\obj\Debug\net10.0\refint\CareLink.Core.dll
 D:\NSBM\SA-Project\careLink-backend\CareLink.Core\obj\Debug\net10.0\CareLink.Core.pdb
 D:\NSBM\SA-Project\careLink-backend\CareLink.Core\obj\Debug\net10.0\ref\CareLink.Core.dll
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\bin\Debug\net10.0\CareLink.Core.deps.json
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\bin\Debug\net10.0\CareLink.Core.dll
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\bin\Debug\net10.0\CareLink.Core.pdb
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\obj\Debug\net10.0\CareLink.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\obj\Debug\net10.0\CareLink.Core.AssemblyInfoInputs.cache
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\obj\Debug\net10.0\CareLink.Core.AssemblyInfo.cs
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\obj\Debug\net10.0\CareLink.Core.csproj.CoreCompileInputs.cache
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\obj\Debug\net10.0\CareLink.Core.sourcelink.json
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\obj\Debug\net10.0\CareLink.Core.dll
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\obj\Debug\net10.0\refint\CareLink.Core.dll
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\obj\Debug\net10.0\CareLink.Core.pdb
+C:\Users\My PC\Desktop\CareLink\careLink-backend\CareLink.Core\obj\Debug\net10.0\ref\CareLink.Core.dll
