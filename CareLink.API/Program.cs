@@ -1,3 +1,5 @@
+using CareLink.Application;
+using CareLink.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -5,13 +7,22 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
+// Register Clean Architecture layers
+builder.Services.AddApplicationServices();
+builder.Services.AddInfrastructureServices();
+
 // Configure CORS for React frontend
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("CareLinkFrontend", policy =>
     {
         policy
-            .WithOrigins("http://localhost:5173")
+            .SetIsOriginAllowed(origin =>
+            {
+                if (string.IsNullOrEmpty(origin)) return false;
+                var uri = new Uri(origin);
+                return uri.Host == "localhost" || uri.Host == "127.0.0.1";
+            })
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
