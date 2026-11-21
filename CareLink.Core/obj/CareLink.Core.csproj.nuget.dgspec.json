@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj": {}
+    "D:\\Uni\\CareLink\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj": {}
   },
   "projects": {
-    "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj": {
+    "D:\\Uni\\CareLink\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj",
+        "projectUniqueName": "D:\\Uni\\CareLink\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj",
         "projectName": "CareLink.Core",
-        "projectPath": "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj",
-        "packagesPath": "C:\\Users\\ravin\\.nuget\\packages\\",
-        "outputPath": "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Core\\obj\\",
+        "projectPath": "D:\\Uni\\CareLink\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj",
+        "packagesPath": "C:\\Users\\Lenovo\\.nuget\\packages\\",
+        "outputPath": "D:\\Uni\\CareLink\\careLink-backend\\CareLink.Core\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\ravin\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\Lenovo\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
