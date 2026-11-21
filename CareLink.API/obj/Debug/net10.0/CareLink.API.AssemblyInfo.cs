@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CareLink.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9d8c4e6625fd8cf4927550f4a17a42d14bd5874e")]
 [assembly: System.Reflection.AssemblyProductAttribute("CareLink.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CareLink.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
