@@ -2,6 +2,22 @@
   "version": 4,
   "targets": {
     "net10.0": {
+      "Microsoft.Extensions.DependencyInjection.Abstractions/10.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/net10.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net8.0/_._": {}
+        }
+      },
       "CareLink.Core/1.0.0": {
         "type": "project",
         "framework": ".NETCoreApp,Version=v10.0",
@@ -15,6 +31,37 @@
     }
   },
   "libraries": {
+    "Microsoft.Extensions.DependencyInjection.Abstractions/10.0.0": {
+      "sha512": "L3AdmZ1WOK4XXT5YFPEwyt0ep6l8lGIPs7F5OOBZc77Zqeo01Of7XXICy47628sdVl0v/owxYJTe86DTgFwKCA==",
+      "type": "package",
+      "path": "microsoft.extensions.dependencyinjection.abstractions/10.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "PACKAGE.md",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/Microsoft.Extensions.DependencyInjection.Abstractions.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net8.0/_._",
+        "buildTransitive/netcoreapp2.0/Microsoft.Extensions.DependencyInjection.Abstractions.targets",
+        "lib/net10.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+        "lib/net10.0/Microsoft.Extensions.DependencyInjection.Abstractions.xml",
+        "lib/net462/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+        "lib/net462/Microsoft.Extensions.DependencyInjection.Abstractions.xml",
+        "lib/net8.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+        "lib/net8.0/Microsoft.Extensions.DependencyInjection.Abstractions.xml",
+        "lib/net9.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+        "lib/net9.0/Microsoft.Extensions.DependencyInjection.Abstractions.xml",
+        "lib/netstandard2.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+        "lib/netstandard2.0/Microsoft.Extensions.DependencyInjection.Abstractions.xml",
+        "lib/netstandard2.1/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+        "lib/netstandard2.1/Microsoft.Extensions.DependencyInjection.Abstractions.xml",
+        "microsoft.extensions.dependencyinjection.abstractions.10.0.0.nupkg.sha512",
+        "microsoft.extensions.dependencyinjection.abstractions.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
     "CareLink.Core/1.0.0": {
       "type": "project",
       "path": "../CareLink.Core/CareLink.Core.csproj",
@@ -23,27 +70,28 @@
   },
   "projectFileDependencyGroups": {
     "net10.0": [
-      "CareLink.Core >= 1.0.0"
+      "CareLink.Core >= 1.0.0",
+      "Microsoft.Extensions.DependencyInjection.Abstractions >= 10.0.0-*"
     ]
   },
   "packageFolders": {
-    "C:\\Users\\ravin\\.nuget\\packages\\": {},
+    "C:\\Users\\Lenovo\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Application\\CareLink.Application.csproj",
+      "projectUniqueName": "D:\\Uni\\CareLink\\careLink-backend\\CareLink.Application\\CareLink.Application.csproj",
       "projectName": "CareLink.Application",
-      "projectPath": "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Application\\CareLink.Application.csproj",
-      "packagesPath": "C:\\Users\\ravin\\.nuget\\packages\\",
-      "outputPath": "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Application\\obj\\",
+      "projectPath": "D:\\Uni\\CareLink\\careLink-backend\\CareLink.Application\\CareLink.Application.csproj",
+      "packagesPath": "C:\\Users\\Lenovo\\.nuget\\packages\\",
+      "outputPath": "D:\\Uni\\CareLink\\careLink-backend\\CareLink.Application\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\ravin\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\Lenovo\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
@@ -59,8 +107,8 @@
           "framework": "net10.0",
           "targetAlias": "net10.0",
           "projectReferences": {
-            "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj": {
-              "projectPath": "D:\\NSBM\\SA-Project\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj"
+            "D:\\Uni\\CareLink\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj": {
+              "projectPath": "D:\\Uni\\CareLink\\careLink-backend\\CareLink.Core\\CareLink.Core.csproj"
             }
           }
         }
@@ -81,6 +129,12 @@
       "net10.0": {
         "framework": "net10.0",
         "targetAlias": "net10.0",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": {
+            "target": "Package",
+            "version": "[10.0.0-*, )"
+          }
+        },
         "imports": [
           "net461",
           "net462",
