@@ -1,0 +1,337 @@
+@CareLink.Backend_HostAddress = http://localhost:5277
+
+GET {{CareLink.Backend_HostAddress}}/
+Accept: application/json
+
+### Communications Overview
+GET {{CareLink.Backend_HostAddress}}/api/communications/overview
+Accept: application/json
+
+### Audiences
+GET {{CareLink.Backend_HostAddress}}/api/communications/audiences
+Accept: application/json
+
+### Channel Health
+GET {{CareLink.Backend_HostAddress}}/api/communications/channel-health
+Accept: application/json
+
+### Get Broadcasts
+GET {{CareLink.Backend_HostAddress}}/api/communications/broadcasts
+Accept: application/json
+
+### Get Broadcast by ID
+GET {{CareLink.Backend_HostAddress}}/api/communications/broadcasts/BRD-001
+Accept: application/json
+
+### Create Broadcast
+POST {{CareLink.Backend_HostAddress}}/api/communications/broadcasts
+Content-Type: application/json
+
+{
+  "title": "Field Safety Briefing - Morning Shift",
+  "audience": "North Ward volunteers",
+  "message": "Please ensure protective boots and high-vis vests are equipped before sector patrol.",
+  "channels": ["In-app", "SMS"]
+}
+
+### Resend Broadcast
+POST {{CareLink.Backend_HostAddress}}/api/communications/broadcasts/BRD-001/resend
+Accept: application/json
+
+### Delete Broadcast
+DELETE {{CareLink.Backend_HostAddress}}/api/communications/broadcasts/BRD-001
+Accept: application/json
+
+### Get Draft
+GET {{CareLink.Backend_HostAddress}}/api/communications/draft
+Accept: application/json
+
+### Save Draft
+POST {{CareLink.Backend_HostAddress}}/api/communications/draft
+Content-Type: application/json
+
+{
+  "title": "Evacuation Route Update",
+  "audience": "All active volunteers",
+  "message": "Route 4 bridge closed. Reroute via Bypass 12.",
+  "channels": ["In-app"]
+}
+
+### Export Broadcasts CSV
+GET {{CareLink.Backend_HostAddress}}/api/communications/export
+
+### Volunteer Notifications Summary
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/notifications/summary
+Accept: application/json
+
+### Get Volunteer Notifications
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/notifications?tab=All&pageNumber=1&pageSize=6
+Accept: application/json
+
+### Get Volunteer Notification By ID
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/notifications/1
+Accept: application/json
+
+### Mark Volunteer Notification As Read
+PATCH {{CareLink.Backend_HostAddress}}/api/volunteer/notifications/1/read
+Accept: application/json
+
+### Mark All Volunteer Notifications As Read
+POST {{CareLink.Backend_HostAddress}}/api/volunteer/notifications/mark-all-read
+Accept: application/json
+
+### Delete Volunteer Notification
+DELETE {{CareLink.Backend_HostAddress}}/api/volunteer/notifications/1
+Accept: application/json
+
+### Get Volunteer Notification Preferences
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/notifications/preferences
+Accept: application/json
+
+### Update Volunteer Notification Preferences
+PUT {{CareLink.Backend_HostAddress}}/api/volunteer/notifications/preferences
+Content-Type: application/json
+
+{
+  "assignments": true,
+  "verification": true,
+  "safety": true,
+  "aiMatching": true,
+  "inApp": true,
+  "email": true,
+  "sms": false,
+  "urgentOnly": false
+}
+
+### Export Volunteer Notifications CSV
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/notifications/export
+
+### Volunteer Verification Stats
+GET {{CareLink.Backend_HostAddress}}/api/volunteer-verifications/stats
+Accept: application/json
+
+### Pending Applications
+GET {{CareLink.Backend_HostAddress}}/api/volunteer-verifications/pending
+Accept: application/json
+
+### All Applications (Paginated)
+GET {{CareLink.Backend_HostAddress}}/api/volunteer-verifications?status=Pending&pageNumber=1&pageSize=4
+Accept: application/json
+
+### Get Application By ID
+GET {{CareLink.Backend_HostAddress}}/api/volunteer-verifications/VER-218
+Accept: application/json
+
+### Approve Application
+PUT {{CareLink.Backend_HostAddress}}/api/volunteer-verifications/VER-218/approve
+Content-Type: application/json
+
+{
+  "notes": "Verified ID and certifications successfully.",
+  "reviewedBy": "Nadia Okafor (Coordinator)"
+}
+
+### Reject Application
+PUT {{CareLink.Backend_HostAddress}}/api/volunteer-verifications/VER-198/reject
+Content-Type: application/json
+
+{
+  "notes": "Missing required government ID documents.",
+  "reviewedBy": "Nadia Okafor (Coordinator)"
+}
+
+### Export Verifications CSV
+GET {{CareLink.Backend_HostAddress}}/api/volunteer-verifications/export
+
+### Volunteer Reports Overview
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/reports/overview?dateRange=18-25%20June%202025&operationalArea=All%20areas&skillGroup=All%20skills
+Accept: application/json
+
+### Volunteer Analytics Summary
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/reports/analytics
+Accept: application/json
+
+### Volunteer Trend Data
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/reports/trend
+Accept: application/json
+
+### Volunteer Skill Breakdown
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/reports/skills
+Accept: application/json
+
+### Volunteer Report Library
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/reports/library
+Accept: application/json
+
+### Volunteer Report Details
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/reports/library/1
+Accept: application/json
+
+### Export Report Item
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/reports/library/1/export
+
+### Export Reports Overview CSV
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/reports/export
+
+### Shelter Reports Overview
+GET {{CareLink.Backend_HostAddress}}/api/shelter/reports/overview?dateRange=18%E2%80%9325%20June%202025&shelter=All%20shelters&district=All%20districts
+Accept: application/json
+
+### Shelter Metrics
+GET {{CareLink.Backend_HostAddress}}/api/shelter/reports/metrics?shelter=Riverton%20Central
+Accept: application/json
+
+### Shelter Trend Data
+GET {{CareLink.Backend_HostAddress}}/api/shelter/reports/trend?shelter=Riverton%20Central
+Accept: application/json
+
+### Shelter Report Library
+GET {{CareLink.Backend_HostAddress}}/api/shelter/reports/library
+Accept: application/json
+
+### Export Shelter Overview CSV
+GET {{CareLink.Backend_HostAddress}}/api/shelter/reports/export?shelter=All%20shelters
+
+### Export Shelter Report Item CSV
+GET {{CareLink.Backend_HostAddress}}/api/shelter/reports/export/item?reportTitle=Shelter%20Occupancy%20Report&shelter=Riverton%20Central
+
+### Volunteer Settings - Get
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/settings
+Accept: application/json
+
+### Volunteer Settings - Update
+PUT {{CareLink.Backend_HostAddress}}/api/volunteer/settings
+Content-Type: application/json
+
+{
+  "profile": {
+    "fullName": "Nadia Okafor",
+    "email": "nadia@reliefos.org",
+    "phone": "+94 77 412 8041",
+    "area": "Greater Riverton"
+  },
+  "matchingRules": {
+    "minimumScore": "75",
+    "travelDistance": "30",
+    "availability": true,
+    "verifiedSkills": true,
+    "experience": true,
+    "training": true,
+    "preventConflicts": true,
+    "humanApproval": true
+  },
+  "notificationSettings": {
+    "assignments": true,
+    "verification": true,
+    "safety": true,
+    "aiMatching": true,
+    "communications": true,
+    "inApp": true,
+    "email": true,
+    "sms": false,
+    "urgentOnly": false
+  },
+  "security": {
+    "twoFactor": true
+  }
+}
+
+### Volunteer Settings - Change Password
+POST {{CareLink.Backend_HostAddress}}/api/volunteer/settings/change-password
+Content-Type: application/json
+
+{
+  "currentPassword": "oldPassword123",
+  "newPassword": "newSecurePassword456!",
+  "confirmPassword": "newSecurePassword456!"
+}
+
+### Volunteer Settings - Revoke Session
+DELETE {{CareLink.Backend_HostAddress}}/api/volunteer/settings/sessions/sess-02
+Accept: application/json
+
+### Volunteer Settings - Reset Defaults
+POST {{CareLink.Backend_HostAddress}}/api/volunteer/settings/reset
+Accept: application/json
+
+### Skills & Availability - Overview
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/skills-availability/overview
+Accept: application/json
+
+### Skills & Availability - Stats
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/skills-availability/stats
+Accept: application/json
+
+### Skills & Availability - Skills List
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/skills-availability/skills
+Accept: application/json
+
+### Skills & Availability - Add Skill
+POST {{CareLink.Backend_HostAddress}}/api/volunteer/skills-availability/skills
+Content-Type: application/json
+
+{
+  "name": "Disaster Mental Health Support",
+  "category": "Medical & Support"
+}
+
+### Skills & Availability - Remove Skill
+DELETE {{CareLink.Backend_HostAddress}}/api/volunteer/skills-availability/skills/Disaster%20Mental%20Health%20Support
+Accept: application/json
+
+### Skills & Availability - Forecast
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/skills-availability/forecast
+Accept: application/json
+
+### Skills & Availability - Submit Request
+POST {{CareLink.Backend_HostAddress}}/api/volunteer/skills-availability/requests
+Content-Type: application/json
+
+{
+  "skill": "First Aid & Medical",
+  "location": "North Riverton High School Shelter",
+  "date": "2026-11-20",
+  "startTime": "09:00",
+  "endTime": "15:00",
+  "volunteers": 6
+}
+
+### Skills & Availability - Export CSV
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/skills-availability/export
+
+### Volunteer Tasks - Get All
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/tasks?tab=All%20tasks&pageNumber=1&pageSize=10
+Accept: application/json
+
+### Volunteer Tasks - Get Counts
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/tasks/counts
+Accept: application/json
+
+### Volunteer Tasks - Get By ID
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/tasks/TASK-782
+Accept: application/json
+
+### Volunteer Tasks - Create Task
+POST {{CareLink.Backend_HostAddress}}/api/volunteer/tasks
+Content-Type: application/json
+
+{
+  "title": "Emergency Flood Barrier Setup",
+  "location": "Eastbank Riverfront",
+  "skills": ["Rescue", "Logistics"],
+  "priority": "Critical",
+  "date": "Today",
+  "time": "18:00",
+  "volunteers": 5
+}
+
+### Volunteer Tasks - Update Status
+PATCH {{CareLink.Backend_HostAddress}}/api/volunteer/tasks/TASK-782/status
+Content-Type: application/json
+
+{
+  "status": "Completed"
+}
+
+### Volunteer Tasks - Export CSV
+GET {{CareLink.Backend_HostAddress}}/api/volunteer/tasks/export
