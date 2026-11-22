@@ -1136,6 +1136,10 @@ Return a valid JSON object matching this schema:
                     detail.IsLiveAiGenerated = true;
                 }
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Gemini generation failed for Crisis Analysis. Falling back to grounded deterministic baseline.");
@@ -1253,6 +1257,10 @@ Return a valid JSON object matching:
                     detail.ResourceRecommendations = aiResult.ResourcePlan;
                     detail.IsLiveAiGenerated = true;
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

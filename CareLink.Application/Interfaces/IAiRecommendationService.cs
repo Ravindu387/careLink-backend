@@ -86,7 +86,7 @@ public interface IAiRecommendationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Generate AI shelter matching recommendations based on actual occupancy and facilities.
+    /// Generate AI shelter matching recommendations based on actual shelter capacity and special requirements.
     /// </summary>
     Task<ApiResponse<AiRecommendationDetailDto>> GenerateShelterRecommendationsAsync(
         string crisisId,
@@ -95,7 +95,7 @@ public interface IAiRecommendationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Generate AI volunteer matching recommendations considering skills and current deployments.
+    /// Generate AI volunteer matching recommendations considering skills, radius, and availability.
     /// </summary>
     Task<ApiResponse<AiRecommendationDetailDto>> GenerateVolunteerRecommendationsAsync(
         string crisisId,
@@ -104,7 +104,7 @@ public interface IAiRecommendationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Generate a multi-domain combined response plan for a crisis.
+    /// Generate a comprehensive multi-entity response plan combining crisis, resource, shelter, and volunteer allocations.
     /// </summary>
     Task<ApiResponse<AiRecommendationDetailDto>> GenerateResponsePlanAsync(
         string crisisId,

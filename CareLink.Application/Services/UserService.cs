@@ -1,4 +1,5 @@
 using CareLink.Application.Common;
+using CareLink.Application.DTOs.Roles;
 using CareLink.Application.DTOs.Users;
 using CareLink.Application.Interfaces;
 using CareLink.Core.Constants;
@@ -233,13 +234,9 @@ public class UserService : IUserService
 
         await _userManager.AddToRoleAsync(user, assignedRole);
 
-        // Fetch user with organization navigation
-        var createdUser = await _userManager.Users
-            .Include(u => u.Organization)
-            .FirstOrDefaultAsync(u => u.Id == user.Id) ?? user;
-
-        var roles = await _userManager.GetRolesAsync(createdUser);
-        var dto = MapToUserDetailsDto(createdUser, roles);
+        var roles = await _userManager.GetRolesAsync(user);
+        var permissions = (await _permissionService.GetUserEffectivePermissionsAsync(user.Id)).ToList();
+        var dto = MapToUserDetailsDto(user, roles, permissions);
 
         return ApiResponse<UserDetailsDto>.SuccessResult(dto, "User created successfully.");
     }
@@ -260,50 +257,40 @@ public class UserService : IUserService
         user.NIC = request.NIC?.Trim();
         user.Address = request.Address?.Trim();
         user.OrganizationId = request.OrganizationId;
-        user.UpdatedAt = DateTime.UtcNow;
-
         if (request.IsActive.HasValue)
         {
             user.IsActive = request.IsActive.Value;
         }
+        user.UpdatedAt = DateTime.UtcNow;
 
         var updateResult = await _userManager.UpdateAsync(user);
         if (!updateResult.Succeeded)
         {
             var errors = updateResult.Errors.Select(e => e.Description).ToList();
-            return ApiResponse<UserDetailsDto>.FailureResult("Failed to update user profile.", errors);
+            return ApiResponse<UserDetailsDto>.FailureResult("Failed to update user.", errors);
         }
 
-        // Update role if specified
         if (!string.IsNullOrWhiteSpace(request.Role))
         {
             var newRole = NormalizeRoleName(request.Role);
             if (UserRoles.IsValidRole(newRole))
             {
                 var currentRoles = await _userManager.GetRolesAsync(user);
-                if (!currentRoles.Contains(newRole, StringComparer.OrdinalIgnoreCase))
+                if (!currentRoles.Contains(newRole))
                 {
-                    if (currentRoles.Any())
-                    {
-                        await _userManager.RemoveFromRolesAsync(user, currentRoles);
-                    }
-
+                    await _userManager.RemoveFromRolesAsync(user, currentRoles);
                     if (!await _roleManager.RoleExistsAsync(newRole))
                     {
                         await _roleManager.CreateAsync(new IdentityRole(newRole));
                     }
-
                     await _userManager.AddToRoleAsync(user, newRole);
                 }
             }
         }
 
-        var updatedUser = await _userManager.Users
-            .Include(u => u.Organization)
-            .FirstOrDefaultAsync(u => u.Id == id) ?? user;
-
-        var updatedRoles = await _userManager.GetRolesAsync(updatedUser);
-        var dto = MapToUserDetailsDto(updatedUser, updatedRoles);
+        var roles = await _userManager.GetRolesAsync(user);
+        var permissions = (await _permissionService.GetUserEffectivePermissionsAsync(user.Id)).ToList();
+        var dto = MapToUserDetailsDto(user, roles, permissions);
 
         return ApiResponse<UserDetailsDto>.SuccessResult(dto, "User updated successfully.");
     }
@@ -347,11 +334,11 @@ public class UserService : IUserService
         var result = await _userManager.UpdateAsync(user);
         if (!result.Succeeded)
         {
-            var errors = result.Errors.Select(e => e.Description).ToList();
-            return ApiResponse<bool>.FailureResult("Failed to update user status.", errors);
+            return ApiResponse<bool>.FailureResult("Failed to update user status.");
         }
 
-        return ApiResponse<bool>.SuccessResult(true, $"User status updated to {(isActive ? "Active" : "Disabled")}.");
+        var statusText = isActive ? "activated" : "deactivated";
+        return ApiResponse<bool>.SuccessResult(true, $"User account {statusText} successfully.");
     }
 
     public async Task<ApiResponse<bool>> DeleteUserAsync(string id)
@@ -362,10 +349,14 @@ public class UserService : IUserService
             return ApiResponse<bool>.FailureResult("User not found.");
         }
 
-        // Protect root system admin from accidental deletion
-        if (user.Email?.Equals("admin@carelink.org", StringComparison.OrdinalIgnoreCase) == true)
+        var roles = await _userManager.GetRolesAsync(user);
+        if (roles.Contains(UserRoles.SystemAdmin))
         {
-            return ApiResponse<bool>.FailureResult("The default system administrator account cannot be deleted.");
+            var systemAdmins = await _userManager.GetUsersInRoleAsync(UserRoles.SystemAdmin);
+            if (systemAdmins.Count <= 1)
+            {
+                return ApiResponse<bool>.FailureResult("Cannot delete the last System Administrator account.");
+            }
         }
 
         // Safeguard: Do not delete the last active administrator
@@ -389,15 +380,14 @@ public class UserService : IUserService
         var result = await _userManager.DeleteAsync(user);
         if (!result.Succeeded)
         {
-            var errors = result.Errors.Select(e => e.Description).ToList();
-            return ApiResponse<bool>.FailureResult("Failed to delete user.", errors);
+            return ApiResponse<bool>.FailureResult("Failed to delete user.");
         }
 
         _permissionService.InvalidateCache(userId: user.Id);
         return ApiResponse<bool>.SuccessResult(true, "User deleted successfully.");
     }
 
-    public async Task<ApiResponse<bool>> UpdateUserRolesAsync(string userId, CareLink.Application.DTOs.Roles.UpdateUserRolesRequestDto request)
+    public async Task<ApiResponse<bool>> UpdateUserRolesAsync(string userId, UpdateUserRolesRequestDto request)
     {
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null)

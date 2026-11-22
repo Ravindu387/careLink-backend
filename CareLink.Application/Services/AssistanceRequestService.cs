@@ -1,308 +1,632 @@
-using System.Collections.Concurrent;
-using CareLink.Application.Common;
-using CareLink.Application.DTOs.AssistanceRequests;
+﻿using CareLink.Application.Common;
+using CareLink.Application.DTOs;
+using CareLink.Application.DTOs.AuditLogs;
 using CareLink.Application.DTOs.Users;
 using CareLink.Application.Interfaces;
+using CareLink.Core.Entities;
+using CareLink.Core.Interfaces;
 using Microsoft.Extensions.Logging;
+using AdminDtos = CareLink.Application.DTOs.AssistanceRequests;
 
 namespace CareLink.Application.Services;
 
 public class AssistanceRequestService : IAssistanceRequestService
 {
-    private readonly ConcurrentDictionary<string, AssistanceRequestDto> _requests = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IAssistanceRequestRepository _repository;
+    private readonly IAIInferenceEngine _aiEngine;
     private readonly IAuditLogService _auditLogService;
     private readonly ILogger<AssistanceRequestService> _logger;
-    private int _idSequence = 2850;
+    private static int _requestCounter = 2855;
+    private static readonly object _counterLock = new();
 
     public AssistanceRequestService(
+        IAssistanceRequestRepository repository,
+        IAIInferenceEngine aiEngine,
         IAuditLogService auditLogService,
         ILogger<AssistanceRequestService> logger)
     {
+        _repository = repository;
+        _aiEngine = aiEngine;
         _auditLogService = auditLogService;
         _logger = logger;
-        InitializeDefaultRequests();
     }
 
-    private void InitializeDefaultRequests()
-    {
-        var now = DateTime.UtcNow;
+    #region Operational & Coordinator Methods (Safna)
 
-        var seed = new List<AssistanceRequestDto>
+    public async Task<IReadOnlyList<AssistanceRequestResponseDto>> GetAllAsync(
+        AssistanceRequestQueryParameters query,
+        CancellationToken cancellationToken = default)
+    {
+        var filterParams = new AssistanceRequestFilterParams
         {
-            new()
-            {
-                Id = "REQ-2841",
-                CreatedAt = now.AddMinutes(-12),
-                TimeAgo = "12 min ago",
-                Category = "Emergency shelter",
-                Location = "Riverside, North Ward",
-                ReportedPriority = "Critical",
-                Recommendation = "Critical priority",
-                Confidence = "94%",
-                AssignedTo = "Unassigned",
-                Status = "Awaiting review",
-                AffectedPeople = 6,
-                Contact = "Verified · ending 0198",
-                Description = "Water has reached our ground floor and is rising. We have two young children and my mother cannot walk without assistance.",
-                CrisisName = "Monsoon Floods 2025"
-            },
-            new()
-            {
-                Id = "REQ-2839",
-                CreatedAt = now.AddMinutes(-26),
-                TimeAgo = "26 min ago",
-                Category = "Medical supplies",
-                Location = "Old Town, Sector 4",
-                ReportedPriority = "High",
-                Recommendation = "High priority",
-                Confidence = "91%",
-                AssignedTo = "Medical Team 3",
-                Status = "Verified",
-                AffectedPeople = 3,
-                Contact = "Verified · ending 0284",
-                Description = "Urgent medical supplies needed for individuals isolated by flood waters in Sector 4.",
-                CrisisName = "Monsoon Floods 2025"
-            },
-            new()
-            {
-                Id = "REQ-2836",
-                CreatedAt = now.AddMinutes(-41),
-                TimeAgo = "41 min ago",
-                Category = "Food & water",
-                Location = "Eastbank, Sector 2",
-                ReportedPriority = "High",
-                Recommendation = "High priority",
-                Confidence = "87%",
-                AssignedTo = "Relief Squad B",
-                Status = "Assigned",
-                AffectedPeople = 3,
-                Contact = "Verified · ending 0891",
-                Description = "Household of 3 isolated without clean drinking water and shelf-stable rations since yesterday.",
-                CrisisName = "Monsoon Floods 2025"
-            },
-            new()
-            {
-                Id = "REQ-2832",
-                CreatedAt = now.AddHours(-1).AddMinutes(-15),
-                TimeAgo = "1 hr ago",
-                Category = "Evacuation support",
-                Location = "West Ward, Sector 1",
-                ReportedPriority = "Critical",
-                Recommendation = "Critical priority",
-                Confidence = "96%",
-                AssignedTo = "Disaster Boat Unit 2",
-                Status = "In progress",
-                AffectedPeople = 8,
-                Contact = "Verified · ending 0442",
-                Description = "Elderly care facility cutoff by road washaway. Immediate boat transfer required.",
-                CrisisName = "Monsoon Floods 2025"
-            },
-            new()
-            {
-                Id = "REQ-2828",
-                CreatedAt = now.AddHours(-2),
-                TimeAgo = "2 hrs ago",
-                Category = "Emergency shelter",
-                Location = "South District, Block C",
-                ReportedPriority = "Medium",
-                Recommendation = "Medium priority",
-                Confidence = "82%",
-                AssignedTo = "Shelter Unit A",
-                Status = "Completed",
-                AffectedPeople = 4,
-                Contact = "Verified · ending 0773",
-                Description = "Family evacuated from low-lying river perimeter and successfully accommodated at Central School Shelter.",
-                CrisisName = "Monsoon Floods 2025"
-            },
-            new()
-            {
-                Id = "REQ-2821",
-                CreatedAt = now.AddHours(-3),
-                TimeAgo = "3 hrs ago",
-                Category = "Food & water",
-                Location = "Highland Camp",
-                ReportedPriority = "Medium",
-                Recommendation = "Medium priority",
-                Confidence = "79%",
-                AssignedTo = "Community Logistics",
-                Status = "Completed",
-                AffectedPeople = 12,
-                Contact = "Verified · ending 0519",
-                Description = "120 rations and water purification packs delivered to temporary relief cluster.",
-                CrisisName = "Monsoon Floods 2025"
-            }
+            Search = query.Search,
+            Tab = query.Tab,
+            CrisisEvent = query.CrisisEvent,
+            Priority = query.Priority,
+            Category = query.Category,
+            Status = query.Status,
+            Organisation = query.Organisation,
+            VerifiedOnly = query.VerifiedOnly,
+            UnassignedOnly = query.UnassignedOnly
         };
 
-        foreach (var req in seed)
-        {
-            _requests[req.Id] = req;
-        }
+        var list = await _repository.GetAllAsync(filterParams, cancellationToken);
+        return list.Select(MapToDto).ToList();
     }
 
-    public Task<ApiResponse<PaginatedListDto<AssistanceRequestDto>>> GetRequestsAsync(AssistanceRequestQueryDto query)
+    public async Task<AssistanceRequestResponseDto?> GetByIdAsync(
+        string id,
+        CancellationToken cancellationToken = default)
     {
-        var filtered = _requests.Values.AsQueryable();
+        var request = await _repository.GetByIdAsync(id, cancellationToken);
+        return request == null ? null : MapToDto(request);
+    }
+
+    public async Task<AssistanceRequestResponseDto> CreateAsync(
+        CareLink.Application.DTOs.CreateAssistanceRequestDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        string id;
+        lock (_counterLock)
+        {
+            _requestCounter++;
+            id = $"REQ-{_requestCounter}";
+        }
+
+        string priorityLevel;
+        int confidence;
+        string priorityDisplay;
+
+        if (!string.IsNullOrWhiteSpace(dto.Priority) && dto.Priority.Contains('·'))
+        {
+            var parts = dto.Priority.Split('·', StringSplitOptions.TrimEntries);
+            priorityLevel = parts[0];
+            int.TryParse(parts[1].Replace("%", "").Trim(), out confidence);
+            if (confidence == 0) confidence = 85;
+            priorityDisplay = $"{priorityLevel} · {confidence}%";
+        }
+        else
+        {
+            // Evaluate with AI engine
+            var rec = _aiEngine.InferRecommendation(new GenerateRecommendationRequestDto
+            {
+                RequestId = id,
+                Category = dto.Category,
+                Location = dto.Location,
+                Description = dto.Description,
+                AffectedPeopleCount = dto.AffectedPeopleCount,
+                HasVulnerableMembers = dto.HasVulnerableMembers,
+                IsLifeThreatening = dto.IsLifeThreatening,
+                PriorityHint = dto.Priority
+            });
+
+            priorityLevel = rec.Priority;
+            confidence = rec.Confidence;
+            priorityDisplay = $"{priorityLevel} · {confidence}%";
+        }
+
+        var isLifeThreatening = dto.IsLifeThreatening || priorityLevel.Equals("Critical", StringComparison.OrdinalIgnoreCase);
+
+        var entity = new AssistanceRequest
+        {
+            Id = id,
+            Category = dto.Category.Trim(),
+            Location = dto.Location.Trim(),
+            CrisisEvent = string.IsNullOrWhiteSpace(dto.CrisisEvent) ? "Monsoon Floods 2025" : dto.CrisisEvent.Trim(),
+            PriorityLevel = priorityLevel,
+            Confidence = confidence,
+            PriorityDisplay = priorityDisplay,
+            Verification = string.IsNullOrWhiteSpace(dto.Verification) ? "Pending verification" : dto.Verification.Trim(),
+            Assigned = string.IsNullOrWhiteSpace(dto.Assigned) ? "Unassigned" : dto.Assigned.Trim(),
+            Status = string.IsNullOrWhiteSpace(dto.Status) ? "Submitted" : dto.Status.Trim(),
+            Organisation = string.IsNullOrWhiteSpace(dto.Organisation) ? "National Disaster Authority" : dto.Organisation.Trim(),
+            Description = dto.Description,
+            AffectedPeopleCount = dto.AffectedPeopleCount ?? 1,
+            HasVulnerableMembers = dto.HasVulnerableMembers,
+            IsLifeThreatening = isLifeThreatening,
+            IsOverdue = false,
+            IsPotentialDuplicate = false,
+            ContactName = dto.ContactName,
+            ContactPhone = dto.ContactPhone,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        var created = await _repository.AddAsync(entity, cancellationToken);
+        return MapToDto(created);
+    }
+
+    public async Task<AssistanceRequestResponseDto?> UpdateAsync(
+        string id,
+        CareLink.Application.DTOs.UpdateAssistanceRequestDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await _repository.GetByIdAsync(id, cancellationToken);
+        if (existing == null) return null;
+
+        if (!string.IsNullOrWhiteSpace(dto.Category)) existing.Category = dto.Category.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Location)) existing.Location = dto.Location.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Priority))
+        {
+            existing.PriorityDisplay = dto.Priority.Trim();
+            if (dto.Priority.Contains('·'))
+            {
+                var parts = dto.Priority.Split('·', StringSplitOptions.TrimEntries);
+                existing.PriorityLevel = parts[0];
+                if (int.TryParse(parts[1].Replace("%", "").Trim(), out var conf))
+                {
+                    existing.Confidence = conf;
+                }
+            }
+            else
+            {
+                existing.PriorityLevel = dto.Priority.Trim();
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(dto.Verification)) existing.Verification = dto.Verification.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Assigned))
+        {
+            existing.Assigned = dto.Assigned.Trim();
+            if (!existing.Assigned.Equals("Unassigned", StringComparison.OrdinalIgnoreCase))
+            {
+                existing.AssignedAt = DateTimeOffset.UtcNow;
+                if (existing.Status.Equals("Submitted", StringComparison.OrdinalIgnoreCase))
+                {
+                    existing.Status = "Assigned";
+                }
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(dto.Status)) existing.Status = dto.Status.Trim();
+        if (!string.IsNullOrWhiteSpace(dto.Organisation)) existing.Organisation = dto.Organisation.Trim();
+        if (dto.Description != null) existing.Description = dto.Description;
+        if (dto.AffectedPeopleCount.HasValue) existing.AffectedPeopleCount = dto.AffectedPeopleCount.Value;
+        if (dto.HasVulnerableMembers.HasValue) existing.HasVulnerableMembers = dto.HasVulnerableMembers.Value;
+        if (dto.IsLifeThreatening.HasValue) existing.IsLifeThreatening = dto.IsLifeThreatening.Value;
+
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var updated = await _repository.UpdateAsync(existing, cancellationToken);
+        return updated == null ? null : MapToDto(updated);
+    }
+
+    public async Task<AssistanceRequestResponseDto?> AssignAsync(
+        string id,
+        AssignAssistanceRequestDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await _repository.GetByIdAsync(id, cancellationToken);
+        if (existing == null) return null;
+
+        existing.Assigned = dto.Assigned.Trim();
+        existing.AssignedAt = DateTimeOffset.UtcNow;
+        if (!string.IsNullOrWhiteSpace(dto.Organisation))
+        {
+            existing.Organisation = dto.Organisation.Trim();
+        }
+
+        if (existing.Status.Equals("Submitted", StringComparison.OrdinalIgnoreCase) ||
+            existing.Status.Equals("Under Review", StringComparison.OrdinalIgnoreCase))
+        {
+            existing.Status = "Assigned";
+        }
+
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var updated = await _repository.UpdateAsync(existing, cancellationToken);
+        return updated == null ? null : MapToDto(updated);
+    }
+
+    public async Task<AssistanceRequestResponseDto?> UpdateStatusAsync(
+        string id,
+        UpdateAssistanceRequestStatusDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await _repository.GetByIdAsync(id, cancellationToken);
+        if (existing == null) return null;
+
+        existing.Status = dto.Status.Trim();
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
+
+        if (existing.Status.Equals("Escalated", StringComparison.OrdinalIgnoreCase))
+        {
+            existing.IsOverdue = true;
+        }
+
+        var updated = await _repository.UpdateAsync(existing, cancellationToken);
+        return updated == null ? null : MapToDto(updated);
+    }
+
+    public async Task<bool> DeleteAsync(string id, CancellationToken cancellationToken = default)
+    {
+        return await _repository.DeleteAsync(id, cancellationToken);
+    }
+
+    public async Task<AssistanceRequestMetricsDto> GetMetricsAsync(CancellationToken cancellationToken = default)
+    {
+        var metrics = await _repository.GetMetricsAsync(cancellationToken);
+        return new AssistanceRequestMetricsDto
+        {
+            TotalRequests = metrics.TotalRequests,
+            Unassigned = metrics.Unassigned,
+            Overdue = metrics.Overdue,
+            PotentialDuplicates = metrics.PotentialDuplicates,
+            UnderReview = metrics.UnderReview,
+            InProgress = metrics.InProgress,
+            Completed = metrics.Completed,
+            Escalated = metrics.Escalated
+        };
+    }
+
+    public async Task ResetDataAsync(CancellationToken cancellationToken = default)
+    {
+        await _repository.ResetToDefaultAsync(cancellationToken);
+    }
+
+    #endregion
+
+    #region Administrative & Management Methods (dev)
+
+    public async Task<ApiResponse<PaginatedListDto<AdminDtos.AssistanceRequestDto>>> GetRequestsAsync(
+        AdminDtos.AssistanceRequestQueryDto query)
+    {
+        var allEntities = await _repository.GetAllAsync();
+        var queryable = allEntities.AsEnumerable();
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            var s = query.Search.Trim().ToLower();
-            filtered = filtered.Where(r =>
-                r.Id.ToLower().Contains(s) ||
-                r.Description.ToLower().Contains(s) ||
-                r.Location.ToLower().Contains(s) ||
-                r.Category.ToLower().Contains(s) ||
-                r.AssignedTo.ToLower().Contains(s));
+            var s = query.Search.Trim();
+            queryable = queryable.Where(r =>
+                r.Id.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                r.Category.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                r.Location.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                r.Assigned.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                (r.Description != null && r.Description.Contains(s, StringComparison.OrdinalIgnoreCase)));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Status) && !query.Status.Equals("All", StringComparison.OrdinalIgnoreCase) && !query.Status.Equals("All statuses", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(query.Status))
         {
-            filtered = filtered.Where(r => r.Status.Equals(query.Status, StringComparison.OrdinalIgnoreCase));
+            queryable = queryable.Where(r => r.Status.Equals(query.Status, StringComparison.OrdinalIgnoreCase));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Priority) && !query.Priority.Equals("All", StringComparison.OrdinalIgnoreCase) && !query.Priority.Equals("All priorities", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(query.Priority))
         {
-            filtered = filtered.Where(r => r.ReportedPriority.Equals(query.Priority, StringComparison.OrdinalIgnoreCase));
+            queryable = queryable.Where(r => r.PriorityLevel.Equals(query.Priority, StringComparison.OrdinalIgnoreCase));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Category) && !query.Category.Equals("All", StringComparison.OrdinalIgnoreCase) && !query.Category.Equals("All categories", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(query.Category))
         {
-            filtered = filtered.Where(r => r.Category.Equals(query.Category, StringComparison.OrdinalIgnoreCase));
+            queryable = queryable.Where(r => r.Category.Equals(query.Category, StringComparison.OrdinalIgnoreCase));
         }
 
-        var total = filtered.Count();
-        var page = Math.Max(1, query.PageNumber);
-        var size = Math.Max(1, Math.Min(100, query.PageSize));
+        if (!string.IsNullOrWhiteSpace(query.Crisis))
+        {
+            queryable = queryable.Where(r => r.CrisisEvent.Equals(query.Crisis, StringComparison.OrdinalIgnoreCase));
+        }
 
-        var items = filtered
-            .OrderByDescending(r => r.CreatedAt)
-            .Skip((page - 1) * size)
-            .Take(size)
+        var list = queryable.Select(MapToAdminDto).ToList();
+        var total = list.Count;
+        var paged = list
+            .Skip((query.PageNumber - 1) * query.PageSize)
+            .Take(query.PageSize)
             .ToList();
 
-        var result = new PaginatedListDto<AssistanceRequestDto>
+        var result = new PaginatedListDto<AdminDtos.AssistanceRequestDto>
         {
-            Items = items,
+            Items = paged,
             TotalCount = total,
-            PageNumber = page,
-            PageSize = size
+            PageNumber = query.PageNumber,
+            PageSize = query.PageSize
         };
-        return Task.FromResult(ApiResponse<PaginatedListDto<AssistanceRequestDto>>.SuccessResult(result));
+
+        return ApiResponse<PaginatedListDto<AdminDtos.AssistanceRequestDto>>.SuccessResult(result);
     }
 
-    public Task<ApiResponse<AssistanceRequestStatsDto>> GetStatsAsync()
+    public async Task<ApiResponse<AdminDtos.AssistanceRequestStatsDto>> GetStatsAsync()
     {
-        var all = _requests.Values.ToList();
-        var stats = new AssistanceRequestStatsDto
+        var all = await _repository.GetAllAsync();
+        var stats = new AdminDtos.AssistanceRequestStatsDto
         {
             TotalRequests = all.Count,
-            AwaitingReviewCount = all.Count(r => r.Status.Equals("Awaiting review", StringComparison.OrdinalIgnoreCase)),
-            VerifiedCount = all.Count(r => r.Status.Equals("Verified", StringComparison.OrdinalIgnoreCase)),
+            AwaitingReviewCount = all.Count(r => r.Status.Equals("Awaiting review", StringComparison.OrdinalIgnoreCase) || r.Status.Equals("Submitted", StringComparison.OrdinalIgnoreCase) || r.Status.Equals("Under Review", StringComparison.OrdinalIgnoreCase)),
+            VerifiedCount = all.Count(r => r.Verification.Equals("Verified", StringComparison.OrdinalIgnoreCase) || r.Verification.Equals("Contact verified", StringComparison.OrdinalIgnoreCase)),
             AssignedCount = all.Count(r => r.Status.Equals("Assigned", StringComparison.OrdinalIgnoreCase)),
-            InProgressCount = all.Count(r => r.Status.Equals("In progress", StringComparison.OrdinalIgnoreCase)),
+            InProgressCount = all.Count(r => r.Status.Equals("In Progress", StringComparison.OrdinalIgnoreCase) || r.Status.Equals("In progress", StringComparison.OrdinalIgnoreCase)),
             CompletedCount = all.Count(r => r.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase)),
-            CriticalCount = all.Count(r => r.ReportedPriority.Equals("Critical", StringComparison.OrdinalIgnoreCase))
+            CriticalCount = all.Count(r => r.PriorityLevel.Equals("Critical", StringComparison.OrdinalIgnoreCase))
         };
 
-        return Task.FromResult(ApiResponse<AssistanceRequestStatsDto>.SuccessResult(stats));
+        return ApiResponse<AdminDtos.AssistanceRequestStatsDto>.SuccessResult(stats);
     }
 
-    public Task<ApiResponse<AssistanceRequestDto>> GetByIdAsync(string id)
+    public async Task<ApiResponse<AdminDtos.AssistanceRequestDto>> GetAdminByIdAsync(string id)
     {
-        if (_requests.TryGetValue(id, out var req))
+        var entity = await _repository.GetByIdAsync(id);
+        if (entity == null)
         {
-            return Task.FromResult(ApiResponse<AssistanceRequestDto>.SuccessResult(req));
+            return ApiResponse<AdminDtos.AssistanceRequestDto>.FailureResult($"Assistance request '{id}' not found.");
         }
-        return Task.FromResult(ApiResponse<AssistanceRequestDto>.FailureResult("Assistance request not found."));
+
+        return ApiResponse<AdminDtos.AssistanceRequestDto>.SuccessResult(MapToAdminDto(entity));
     }
 
-    public Task<ApiResponse<AssistanceRequestDto>> CreateRequestAsync(CreateAssistanceRequestDto request, string actor)
+    public async Task<ApiResponse<AdminDtos.AssistanceRequestDto>> CreateRequestAsync(
+        AdminDtos.CreateAssistanceRequestDto request,
+        string actor)
     {
-        var id = $"REQ-{Interlocked.Increment(ref _idSequence)}";
-        var newReq = new AssistanceRequestDto
+        string id;
+        lock (_counterLock)
+        {
+            _requestCounter++;
+            id = $"REQ-{_requestCounter}";
+        }
+
+        var entity = new AssistanceRequest
         {
             Id = id,
-            CreatedAt = DateTime.UtcNow,
-            TimeAgo = "Just now",
-            Category = request.Category,
-            Location = request.Location,
-            ReportedPriority = request.ReportedPriority,
-            Recommendation = $"{request.ReportedPriority} priority",
-            Confidence = "90%",
-            AssignedTo = "Unassigned",
+            Category = request.Category.Trim(),
+            Location = request.Location.Trim(),
+            Description = request.Description.Trim(),
+            AffectedPeopleCount = request.AffectedPeople <= 0 ? 1 : request.AffectedPeople,
+            CrisisEvent = string.IsNullOrWhiteSpace(request.CrisisName) ? "Monsoon Floods 2025" : request.CrisisName.Trim(),
+            PriorityLevel = request.ReportedPriority ?? "High",
+            Confidence = 88,
+            PriorityDisplay = $"{request.ReportedPriority ?? "High"} Â· 88%",
             Status = "Awaiting review",
-            AffectedPeople = request.AffectedPeople,
-            Contact = request.Contact,
-            Description = request.Description,
-            CrisisName = request.CrisisName ?? "Monsoon Floods 2025"
+            Verification = "Contact verified",
+            Assigned = "Unassigned",
+            Organisation = "CareLink Emergency Triage",
+            CreatedAt = DateTimeOffset.UtcNow
         };
 
-        _requests[id] = newReq;
-        _logger.LogInformation("Assistance request {RequestId} logged by {Actor}", id, actor);
+        var created = await _repository.AddAsync(entity);
+        await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
+        {
+            Action = "CreateRequest",
+            Actor = actor,
+            Record = created.Id,
+            Change = $"Created assistance request for {created.Category} at {created.Location}",
+            Rationale = "New request registered",
+            Type = "AssistanceRequest"
+        });
 
-        return Task.FromResult(ApiResponse<AssistanceRequestDto>.SuccessResult(newReq, "Assistance request logged successfully."));
+        return ApiResponse<AdminDtos.AssistanceRequestDto>.SuccessResult(MapToAdminDto(created), "Assistance request submitted.");
     }
 
-    public Task<ApiResponse<AssistanceRequestDto>> UpdateRequestAsync(string id, UpdateAssistanceRequestDto request, string actor)
+    public async Task<ApiResponse<AdminDtos.AssistanceRequestDto>> UpdateRequestAsync(
+        string id,
+        AdminDtos.UpdateAssistanceRequestDto request,
+        string actor)
     {
-        if (!_requests.TryGetValue(id, out var req))
-            return Task.FromResult(ApiResponse<AssistanceRequestDto>.FailureResult("Request not found."));
+        var existing = await _repository.GetByIdAsync(id);
+        if (existing == null)
+        {
+            return ApiResponse<AdminDtos.AssistanceRequestDto>.FailureResult($"Request '{id}' not found.");
+        }
 
-        req.Category = request.Category;
-        req.Location = request.Location;
-        req.ReportedPriority = request.ReportedPriority;
-        req.AffectedPeople = request.AffectedPeople;
-        req.Contact = request.Contact;
-        req.Description = request.Description;
+        if (!string.IsNullOrWhiteSpace(request.Category)) existing.Category = request.Category.Trim();
+        if (!string.IsNullOrWhiteSpace(request.Location)) existing.Location = request.Location.Trim();
+        if (!string.IsNullOrWhiteSpace(request.Description)) existing.Description = request.Description.Trim();
+        if (request.AffectedPeople > 0) existing.AffectedPeopleCount = request.AffectedPeople;
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        return Task.FromResult(ApiResponse<AssistanceRequestDto>.SuccessResult(req, "Request updated."));
+        var updated = await _repository.UpdateAsync(existing);
+        await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
+        {
+            Action = "UpdateRequest",
+            Actor = actor,
+            Record = id,
+            Change = "Updated request details",
+            Rationale = "Request modification requested by user",
+            Type = "AssistanceRequest"
+        });
+
+        return ApiResponse<AdminDtos.AssistanceRequestDto>.SuccessResult(MapToAdminDto(updated!), "Request updated.");
     }
 
-    public Task<ApiResponse<AssistanceRequestDto>> UpdateStatusAsync(string id, UpdateRequestStatusDto request, string actor)
+    public async Task<ApiResponse<AdminDtos.AssistanceRequestDto>> UpdateStatusAsync(
+        string id,
+        AdminDtos.UpdateRequestStatusDto request,
+        string actor)
     {
-        if (!_requests.TryGetValue(id, out var req))
-            return Task.FromResult(ApiResponse<AssistanceRequestDto>.FailureResult("Request not found."));
+        var existing = await _repository.GetByIdAsync(id);
+        if (existing == null)
+        {
+            return ApiResponse<AdminDtos.AssistanceRequestDto>.FailureResult($"Request '{id}' not found.");
+        }
 
-        var oldStatus = req.Status;
-        req.Status = request.Status;
-        if (!string.IsNullOrWhiteSpace(request.Reason))
-            req.RejectionReason = request.Reason;
-        if (!string.IsNullOrWhiteSpace(request.Note))
-            req.FieldVerificationNote = request.Note;
+        existing.Status = request.Status;
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        _logger.LogInformation("Assistance request {RequestId} status changed from {Old} to {New} by {Actor}", id, oldStatus, request.Status, actor);
-        return Task.FromResult(ApiResponse<AssistanceRequestDto>.SuccessResult(req, $"Status updated to {request.Status}."));
+        var updated = await _repository.UpdateAsync(existing);
+        await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
+        {
+            Action = "UpdateStatus",
+            Actor = actor,
+            Record = id,
+            Change = $"Status changed to {request.Status}",
+            Rationale = request.Reason ?? "Status update",
+            Type = "AssistanceRequest"
+        });
+
+        return ApiResponse<AdminDtos.AssistanceRequestDto>.SuccessResult(MapToAdminDto(updated!), $"Status updated to {request.Status}.");
     }
 
-    public Task<ApiResponse<AssistanceRequestDto>> UpdatePriorityAsync(string id, UpdateRequestPriorityDto request, string actor)
+    public async Task<ApiResponse<AdminDtos.AssistanceRequestDto>> UpdatePriorityAsync(
+        string id,
+        AdminDtos.UpdateRequestPriorityDto request,
+        string actor)
     {
-        if (!_requests.TryGetValue(id, out var req))
-            return Task.FromResult(ApiResponse<AssistanceRequestDto>.FailureResult("Request not found."));
+        var existing = await _repository.GetByIdAsync(id);
+        if (existing == null)
+        {
+            return ApiResponse<AdminDtos.AssistanceRequestDto>.FailureResult($"Request '{id}' not found.");
+        }
 
-        req.ReportedPriority = request.Priority;
-        _logger.LogInformation("Assistance request {RequestId} priority updated to {Priority} by {Actor}", id, request.Priority, actor);
-        return Task.FromResult(ApiResponse<AssistanceRequestDto>.SuccessResult(req, $"Priority updated to {request.Priority}."));
+        existing.PriorityLevel = request.Priority;
+        existing.PriorityDisplay = $"{request.Priority} Â· {existing.Confidence}%";
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var updated = await _repository.UpdateAsync(existing);
+        await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
+        {
+            Action = "UpdatePriority",
+            Actor = actor,
+            Record = id,
+            Change = $"Priority changed to {request.Priority}",
+            Rationale = request.Rationale ?? "Priority update",
+            Type = "AssistanceRequest"
+        });
+
+        return ApiResponse<AdminDtos.AssistanceRequestDto>.SuccessResult(MapToAdminDto(updated!), $"Priority updated to {request.Priority}.");
     }
 
-    public Task<ApiResponse<AssistanceRequestDto>> AssignRequestAsync(string id, AssignRequestDto request, string actor)
+    public async Task<ApiResponse<AdminDtos.AssistanceRequestDto>> AssignRequestAsync(
+        string id,
+        AdminDtos.AssignRequestDto request,
+        string actor)
     {
-        if (!_requests.TryGetValue(id, out var req))
-            return Task.FromResult(ApiResponse<AssistanceRequestDto>.FailureResult("Request not found."));
+        var existing = await _repository.GetByIdAsync(id);
+        if (existing == null)
+        {
+            return ApiResponse<AdminDtos.AssistanceRequestDto>.FailureResult($"Request '{id}' not found.");
+        }
 
-        req.AssignedTo = request.AssignedTo;
-        if (req.Status == "Awaiting review" || req.Status == "Verified")
-            req.Status = "Assigned";
+        existing.Assigned = request.AssignedTo.Trim();
+        existing.AssignedAt = DateTimeOffset.UtcNow;
+        existing.Status = "Assigned";
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
 
-        _logger.LogInformation("Assistance request {RequestId} assigned to {Team} by {Actor}", id, request.AssignedTo, actor);
-        return Task.FromResult(ApiResponse<AssistanceRequestDto>.SuccessResult(req, $"Assigned to {request.AssignedTo}."));
+        var updated = await _repository.UpdateAsync(existing);
+        await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
+        {
+            Action = "AssignRequest",
+            Actor = actor,
+            Record = id,
+            Change = $"Assigned to {request.AssignedTo}",
+            Rationale = request.Instructions ?? "Assignment update",
+            Type = "AssistanceRequest"
+        });
+
+        return ApiResponse<AdminDtos.AssistanceRequestDto>.SuccessResult(MapToAdminDto(updated!), $"Request assigned to {request.AssignedTo}.");
     }
 
-    public Task<ApiResponse<bool>> DeleteRequestAsync(string id, string actor)
+    public async Task<ApiResponse<bool>> DeleteRequestAsync(string id, string actor)
     {
-        var removed = _requests.TryRemove(id, out _);
-        if (!removed)
-            return Task.FromResult(ApiResponse<bool>.FailureResult("Request not found."));
+        var deleted = await _repository.DeleteAsync(id);
+        if (!deleted)
+        {
+            return ApiResponse<bool>.FailureResult($"Request '{id}' not found.");
+        }
 
-        _logger.LogInformation("Assistance request {RequestId} deleted by {Actor}", id, actor);
-        return Task.FromResult(ApiResponse<bool>.SuccessResult(true, "Request removed."));
+        await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
+        {
+            Action = "DeleteRequest",
+            Actor = actor,
+            Record = id,
+            Change = $"Deleted assistance request {id}",
+            Rationale = "Deletion requested by authorized user",
+            Type = "AssistanceRequest"
+        });
+
+        return ApiResponse<bool>.SuccessResult(true, "Request deleted successfully.");
     }
+
+    #endregion
+
+    #region Helper Mappers
+
+    private static AssistanceRequestResponseDto MapToDto(AssistanceRequest entity)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - entity.CreatedAt;
+
+        string reported;
+        string age;
+
+        if (diff.TotalMinutes < 1)
+        {
+            reported = "Just now";
+            age = "Just now";
+        }
+        else if (diff.TotalMinutes < 60)
+        {
+            var mins = Math.Max(1, (int)diff.TotalMinutes);
+            reported = $"{mins} min ago";
+            age = $"{mins} min";
+        }
+        else if (diff.TotalHours < 24)
+        {
+            var hrs = (int)diff.TotalHours;
+            var mins = diff.Minutes;
+            reported = hrs == 1 ? "1 hr ago" : $"{hrs} hrs ago";
+            age = mins > 0 ? $"{hrs}h {mins}m" : $"{hrs}h";
+        }
+        else
+        {
+            var days = (int)diff.TotalDays;
+            reported = days == 1 ? "1 day ago" : $"{days} days ago";
+            age = $"{days}d";
+        }
+
+        return new AssistanceRequestResponseDto
+        {
+            Id = entity.Id,
+            Category = entity.Category,
+            Location = entity.Location,
+            CrisisEvent = entity.CrisisEvent,
+            Reported = reported,
+            Priority = string.IsNullOrEmpty(entity.PriorityDisplay)
+                ? $"{entity.PriorityLevel} Â· {entity.Confidence}%"
+                : entity.PriorityDisplay,
+            PriorityLevel = entity.PriorityLevel,
+            Confidence = entity.Confidence,
+            Verification = entity.Verification,
+            Assigned = entity.Assigned,
+            Age = age,
+            Status = entity.Status,
+            Organisation = entity.Organisation,
+            Description = entity.Description,
+            AffectedPeopleCount = entity.AffectedPeopleCount,
+            HasVulnerableMembers = entity.HasVulnerableMembers,
+            IsLifeThreatening = entity.IsLifeThreatening,
+            IsOverdue = entity.IsOverdue || entity.Status.Equals("Escalated", StringComparison.OrdinalIgnoreCase),
+            IsPotentialDuplicate = entity.IsPotentialDuplicate,
+            ContactName = entity.ContactName,
+            ContactPhone = entity.ContactPhone,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt
+        };
+    }
+
+    private static AdminDtos.AssistanceRequestDto MapToAdminDto(AssistanceRequest entity)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - entity.CreatedAt;
+        var timeAgo = diff.TotalMinutes < 60
+            ? $"{(int)Math.Max(1, diff.TotalMinutes)} min ago"
+            : diff.TotalHours < 24
+                ? $"{(int)diff.TotalHours} hr ago"
+                : $"{(int)diff.TotalDays} days ago";
+
+        return new AdminDtos.AssistanceRequestDto
+        {
+            Id = entity.Id,
+            CreatedAt = entity.CreatedAt.UtcDateTime,
+            TimeAgo = timeAgo,
+            Category = entity.Category,
+            Location = entity.Location,
+            ReportedPriority = entity.PriorityLevel,
+            Recommendation = $"{entity.PriorityLevel} priority",
+            Confidence = $"{entity.Confidence}%",
+            AssignedTo = entity.Assigned,
+            Status = entity.Status,
+            AffectedPeople = entity.AffectedPeopleCount,
+            Contact = string.IsNullOrWhiteSpace(entity.ContactPhone)
+                ? "Unverified"
+                : $"Verified · ending {entity.ContactPhone[^Math.Min(4, entity.ContactPhone.Length)..]}",
+            Description = entity.Description ?? string.Empty,
+            CrisisName = entity.CrisisEvent
+        };
+    }
+
+    #endregion
 }

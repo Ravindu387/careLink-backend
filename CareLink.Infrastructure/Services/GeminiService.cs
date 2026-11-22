@@ -198,14 +198,14 @@ public class GeminiService : IGeminiService
                 throw new InvalidOperationException("The configured Google Gemini API key is invalid or unauthorized.");
 
             case HttpStatusCode.TooManyRequests:
-                throw new InvalidOperationException("Gemini API rate limit or quota exceeded. Please try again in a few moments.");
+                throw new InvalidOperationException("Gemini API rate limit exceeded or quota exhausted. Please try again in a few moments.");
 
             case HttpStatusCode.BadRequest:
                 throw new InvalidOperationException("The request payload was rejected by Google Gemini API.");
 
             case HttpStatusCode.InternalServerError:
             case HttpStatusCode.ServiceUnavailable:
-                throw new InvalidOperationException("Google Gemini AI service is temporarily unavailable. Please retry shortly.");
+                throw new InvalidOperationException("Google Gemini AI service is temporarily unavailable (service error). Please retry shortly.");
 
             default:
                 throw new InvalidOperationException($"Google Gemini API request failed with status code {statusCode}.");

@@ -1,10 +1,13 @@
 using System.Text;
 using CareLink.API.Authorization;
+using CareLink.Application;
+using CareLink.Application.Common;
 using CareLink.Application.Interfaces;
 using CareLink.Application.Services;
 using CareLink.Core.Constants;
 using CareLink.Core.Entities;
 using CareLink.Core.Interfaces;
+using CareLink.Infrastructure;
 using CareLink.Infrastructure.Data;
 using CareLink.Infrastructure.Repositories;
 using CareLink.Infrastructure.Services;
@@ -16,9 +19,9 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Configure Database Connection (SQL Server)
+// 1. Configure Database Connection (SQL Server for ASP.NET Core Identity)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+    ?? "Server=(localdb)\\mssqllocaldb;Database=CareLinkIdentityDb;Trusted_Connection=True;MultipleActiveResultSets=true";
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
@@ -37,8 +40,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddDefaultTokenProviders();
 
 // 3. Configure JWT Bearer Authentication
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("JWT Key is not configured.");
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "CareLinkSecureEmergencyKeyForDevEnvironment2026";
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "CareLinkAPI";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "CareLinkClient";
 
@@ -51,7 +53,7 @@ builder.Services.AddAuthentication(options =>
 .AddJwtBearer(options =>
 {
     options.SaveToken = true;
-    options.RequireHttpsMetadata = false; // Set to true in production
+    options.RequireHttpsMetadata = false;
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
@@ -70,7 +72,7 @@ builder.Services.AddAuthentication(options =>
             context.HandleResponse();
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             context.Response.ContentType = "application/json";
-            var result = CareLink.Application.Common.ApiResponse<object>.FailureResult(
+            var result = ApiResponse<object>.FailureResult(
                 "Authentication required. Please sign in.");
             return context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(result));
         },
@@ -78,7 +80,7 @@ builder.Services.AddAuthentication(options =>
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             context.Response.ContentType = "application/json";
-            var result = CareLink.Application.Common.ApiResponse<object>.FailureResult(
+            var result = ApiResponse<object>.FailureResult(
                 "Access denied. Your assigned role does not have permission to access this resource.");
             return context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(result));
         }
@@ -96,13 +98,18 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
-// 4. Register Application & Infrastructure Services (Dependency Injection)
+// 4. Register Application & Infrastructure Clean Architecture layers
+builder.Services.AddApplicationServices();
+builder.Services.AddInfrastructureServices(builder.Configuration);
+
+// Configure Email settings and Gemini AI settings
 builder.Services.AddHttpClient();
-builder.Services.Configure<CareLink.Application.Common.EmailSettings>(
-    builder.Configuration.GetSection(CareLink.Application.Common.EmailSettings.SectionName));
-builder.Services.Configure<CareLink.Application.Common.GeminiOptions>(
-    builder.Configuration.GetSection(CareLink.Application.Common.GeminiOptions.SectionName));
+builder.Services.Configure<EmailSettings>(
+    builder.Configuration.GetSection(EmailSettings.SectionName));
+builder.Services.Configure<GeminiOptions>(
+    builder.Configuration.GetSection(GeminiOptions.SectionName));
 builder.Services.AddSingleton<IGeminiService, GeminiService>();
+
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
@@ -111,23 +118,67 @@ builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IIntegrationHealthService, IntegrationHealthService>();
+
+// AI Recommendations with Gemini (database-backed repository)
 builder.Services.AddScoped<IAiRecommendationRepository, AiRecommendationRepository>();
 builder.Services.AddScoped<IAiRecommendationService, AiRecommendationService>();
+
 builder.Services.AddSingleton<ISecurityEventService, SecurityEventService>();
 builder.Services.AddSingleton<IAuditLogService, AuditLogService>();
 builder.Services.AddSingleton<IVerificationService, VerificationService>();
-builder.Services.AddSingleton<INotificationService, NotificationService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IOrganizationService, OrganizationService>();
-builder.Services.AddSingleton<IAssistanceRequestService, AssistanceRequestService>();
-builder.Services.AddSingleton<ISettingsService, SettingsService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 
-// 5. Register Controllers & OpenAPI Documentation
+// 5. Register Resource Manager & Citizen Services (Oshadi)
+builder.Services.AddSingleton<IAlertRepository, InMemoryAlertRepository>();
+builder.Services.AddScoped<IAlertService, AlertService>();
+builder.Services.AddSingleton<IAllocationRepository, InMemoryAllocationRepository>();
+builder.Services.AddScoped<IAllocationService, AllocationService>();
+builder.Services.AddSingleton<IAuditLogRepository, InMemoryAuditLogRepository>();
+builder.Services.AddSingleton<IDispatchRepository, InMemoryDispatchRepository>();
+builder.Services.AddScoped<IDispatchService, DispatchService>();
+builder.Services.AddSingleton<IInventoryRepository, InMemoryInventoryRepository>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddSingleton<IProcurementRepository, InMemoryProcurementRepository>();
+builder.Services.AddScoped<IProcurementService, ProcurementService>();
+builder.Services.AddSingleton<IReportRepository, InMemoryReportRepository>();
+builder.Services.AddSingleton<IResourceDashboardRepository, InMemoryResourceDashboardRepository>();
+builder.Services.AddScoped<IResourceDashboardService, ResourceDashboardService>();
+builder.Services.AddSingleton<IResourceRequestRepository, InMemoryResourceRequestRepository>();
+builder.Services.AddScoped<IResourceRequestService, ResourceRequestService>();
+builder.Services.AddSingleton<CareLink.Application.Interfaces.ISettingsRepository, InMemorySettingsRepository>();
+builder.Services.AddSingleton<IStockTransferRepository, InMemoryStockTransferRepository>();
+builder.Services.AddScoped<IStockTransferService, StockTransferService>();
+builder.Services.AddSingleton<ISupplierRepository, InMemorySupplierRepository>();
+builder.Services.AddScoped<ISupplierService, SupplierService>();
+builder.Services.AddSingleton<IWarehouseRepository, InMemoryWarehouseRepository>();
+builder.Services.AddScoped<IWarehouseService, WarehouseService>();
+builder.Services.AddSingleton<IFeedbackRepository, InMemoryFeedbackRepository>();
+builder.Services.AddScoped<IFeedbackService, FeedbackService>();
+builder.Services.AddSingleton<ICitizenHomeRepository, InMemoryCitizenHomeRepository>();
+builder.Services.AddScoped<ICitizenHomeService, CitizenHomeService>();
+builder.Services.AddSingleton<IMessageRepository, InMemoryMessageRepository>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddSingleton<IDocumentRepository, InMemoryDocumentRepository>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddSingleton<IHouseholdRepository, InMemoryHouseholdRepository>();
+builder.Services.AddScoped<IHouseholdService, HouseholdService>();
+builder.Services.AddSingleton<ICitizenNotificationRepository, InMemoryCitizenNotificationRepository>();
+builder.Services.AddScoped<ICitizenNotificationService, CitizenNotificationService>();
+builder.Services.AddSingleton<ICitizenProfileRepository, InMemoryCitizenProfileRepository>();
+builder.Services.AddScoped<ICitizenProfileService, CitizenProfileService>();
+builder.Services.AddSingleton<ICitizenRequestRepository, InMemoryCitizenRequestRepository>();
+builder.Services.AddScoped<ICitizenRequestService, CitizenRequestService>();
+builder.Services.AddSingleton<ISafetyUpdateRepository, InMemorySafetyUpdateRepository>();
+builder.Services.AddScoped<ISafetyUpdateService, SafetyUpdateService>();
+builder.Services.AddSingleton<CareLink.Application.Interfaces.IShelterRepository, InMemoryShelterRepository>();
+
+// 6. Register Controllers & OpenAPI Documentation
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
-// 6. Configure CORS for React frontend (Vite port 5173 by default)
+// 7. Configure CORS for React frontend (Vite & standard dev ports)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("CareLinkFrontend", policy =>
@@ -149,24 +200,39 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// 7. Seed Database and Initial Roles/Users on Startup
+// 8. Seed Database and Initial Records on Startup
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var logger = services.GetRequiredService<ILogger<Program>>();
+
+    // Seed Identity users and roles
     try
     {
-        logger.LogInformation("Starting database initialization and seeding...");
+        logger.LogInformation("Starting Identity database initialization and seeding...");
         await DbInitializer.SeedAsync(services);
-        logger.LogInformation("Database initialized and seeded successfully.");
+        logger.LogInformation("Identity database initialized and seeded successfully.");
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "An error occurred during database migration or seeding.");
+        logger.LogWarning(ex, "Could not seed ApplicationDbContext (Identity). Continuing startup.");
+    }
+
+    // Seed CareLinkDbContext operational entities
+    try
+    {
+        logger.LogInformation("Starting CareLinkDbContext data seeding...");
+        var careLinkDb = services.GetRequiredService<CareLinkDbContext>();
+        await DataSeeder.SeedAsync(careLinkDb);
+        logger.LogInformation("CareLinkDbContext seeded successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred during CareLinkDbContext seeding.");
     }
 }
 
-// 8. Configure HTTP Request Pipeline
+// 9. Configure HTTP Request Pipeline
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();

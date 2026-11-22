@@ -1,147 +1,252 @@
 using System.Security.Claims;
 using CareLink.Application.Common;
-using CareLink.Application.DTOs.AssistanceRequests;
+using CareLink.Application.DTOs;
 using CareLink.Application.DTOs.Users;
 using CareLink.Application.Interfaces;
 using CareLink.Core.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using AdminDtos = CareLink.Application.DTOs.AssistanceRequests;
 
 namespace CareLink.API.Controllers;
 
 [ApiController]
 [Route("api/assistance-requests")]
-[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.IncidentManager},{UserRoles.PartnerOfficer},{UserRoles.VolunteerCoordinator}")]
 public class AssistanceRequestsController : ControllerBase
 {
-    private readonly IAssistanceRequestService _requestService;
+    private readonly IAssistanceRequestService _service;
+    private readonly ILogger<AssistanceRequestsController> _logger;
 
-    public AssistanceRequestsController(IAssistanceRequestService requestService)
+    public AssistanceRequestsController(
+        IAssistanceRequestService service,
+        ILogger<AssistanceRequestsController> logger)
     {
-        _requestService = requestService;
+        _service = service;
+        _logger = logger;
     }
 
     /// <summary>
-    /// Retrieve paginated assistance requests with optional crisis, status, priority, and category filters.
+    /// Retrieves assistance requests. Supports both direct list retrieval and paginated administrative queries.
     /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(ApiResponse<PaginatedListDto<AssistanceRequestDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetRequests([FromQuery] AssistanceRequestQueryDto query)
+    [ProducesResponseType(typeof(IReadOnlyList<AssistanceRequestResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<PaginatedListDto<AdminDtos.AssistanceRequestDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAll(
+        [FromQuery] AssistanceRequestQueryParameters query,
+        [FromQuery] int? pageNumber,
+        [FromQuery] int? pageSize,
+        CancellationToken cancellationToken)
     {
-        var result = await _requestService.GetRequestsAsync(query);
-        return Ok(result);
+        if (pageNumber.HasValue || pageSize.HasValue)
+        {
+            var adminQuery = new AdminDtos.AssistanceRequestQueryDto
+            {
+                Search = query.Search,
+                Status = query.Status,
+                Priority = query.Priority,
+                Category = query.Category,
+                Crisis = query.CrisisEvent,
+                PageNumber = pageNumber ?? 1,
+                PageSize = pageSize ?? 10
+            };
+
+            var adminResult = await _service.GetRequestsAsync(adminQuery);
+            return Ok(adminResult);
+        }
+
+        var items = await _service.GetAllAsync(query, cancellationToken);
+        return Ok(items);
     }
 
     /// <summary>
-    /// Retrieve summary statistics across request statuses and critical triage indicators.
+    /// Aggregates and returns real-time assistance request operational metrics.
+    /// </summary>
+    [HttpGet("metrics")]
+    [ProducesResponseType(typeof(AssistanceRequestMetricsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMetrics(CancellationToken cancellationToken)
+    {
+        var metrics = await _service.GetMetricsAsync(cancellationToken);
+        return Ok(metrics);
+    }
+
+    /// <summary>
+    /// Retrieve summary statistics across request statuses and critical triage indicators (Admin).
     /// </summary>
     [HttpGet("stats")]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestStatsDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<AdminDtos.AssistanceRequestStatsDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetStats()
     {
-        var result = await _requestService.GetStatsAsync();
+        var result = await _service.GetStatsAsync();
         return Ok(result);
     }
 
     /// <summary>
-    /// Retrieve details of a specific assistance request by ID.
+    /// Retrieves a single assistance request by unique reference ID.
     /// </summary>
     [HttpGet("{id}")]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetById(string id)
+    [ProducesResponseType(typeof(AssistanceRequestResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetById(string id, CancellationToken cancellationToken)
     {
-        var result = await _requestService.GetByIdAsync(id);
-        if (!result.Success) return NotFound(result);
-        return Ok(result);
+        var item = await _service.GetByIdAsync(id, cancellationToken);
+        if (item == null)
+        {
+            return NotFound(new { error = $"Assistance request '{id}' was not found." });
+        }
+
+        return Ok(item);
     }
 
     /// <summary>
-    /// Submit a new assistance request into the response tracking pipeline.
+    /// Submits and registers a new assistance request into the active response pipeline, automatically running AI triage evaluation.
     /// </summary>
     [HttpPost]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> CreateRequest([FromBody] CreateAssistanceRequestDto request)
+    [ProducesResponseType(typeof(AssistanceRequestResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Create(
+        [FromBody] CareLink.Application.DTOs.CreateAssistanceRequestDto dto,
+        CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
-            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-            return BadRequest(ApiResponse<AssistanceRequestDto>.FailureResult("Validation failed.", errors));
+            return BadRequest(ModelState);
         }
 
-        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "Coordinator";
-        var result = await _requestService.CreateRequestAsync(request, actor);
-        return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
+        var result = await _service.CreateAsync(dto, cancellationToken);
+        _logger.LogInformation("Assistance request {Id} registered for {Category} at {Location}",
+            result.Id, result.Category, result.Location);
+
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
     /// <summary>
-    /// Update details of an existing assistance request.
+    /// Updates an existing assistance request.
     /// </summary>
     [HttpPut("{id}")]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> UpdateRequest(string id, [FromBody] UpdateAssistanceRequestDto request)
+    [ProducesResponseType(typeof(AssistanceRequestResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(
+        string id,
+        [FromBody] CareLink.Application.DTOs.UpdateAssistanceRequestDto dto,
+        CancellationToken cancellationToken)
     {
-        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "Coordinator";
-        var result = await _requestService.UpdateRequestAsync(id, request, actor);
-        if (!result.Success) return BadRequest(result);
-        return Ok(result);
+        var updated = await _service.UpdateAsync(id, dto, cancellationToken);
+        if (updated == null)
+        {
+            return NotFound(new { error = $"Assistance request '{id}' was not found." });
+        }
+
+        return Ok(updated);
     }
 
     /// <summary>
-    /// Update operational request status (e.g., Verified, Completed, Rejected with reason).
+    /// Assigns or reassigns an assistance request to a response team and organisation.
+    /// </summary>
+    [HttpPatch("{id}/assign")]
+    [ProducesResponseType(typeof(AssistanceRequestResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Assign(
+        string id,
+        [FromBody] AssignAssistanceRequestDto dto,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var updated = await _service.AssignAsync(id, dto, cancellationToken);
+        if (updated == null)
+        {
+            return NotFound(new { error = $"Assistance request '{id}' was not found." });
+        }
+
+        _logger.LogInformation("Assistance request {Id} assigned to {Assigned} ({Organisation})",
+            id, dto.Assigned, dto.Organisation ?? updated.Organisation);
+
+        return Ok(updated);
+    }
+
+    /// <summary>
+    /// Updates the operational status of an assistance request.
     /// </summary>
     [HttpPatch("{id}/status")]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> UpdateStatus(string id, [FromBody] UpdateRequestStatusDto request)
+    [ProducesResponseType(typeof(AssistanceRequestResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateStatus(
+        string id,
+        [FromBody] UpdateAssistanceRequestStatusDto dto,
+        CancellationToken cancellationToken)
     {
-        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "Coordinator";
-        var result = await _requestService.UpdateStatusAsync(id, request, actor);
-        if (!result.Success) return BadRequest(result);
-        return Ok(result);
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var validStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Submitted", "Under Review", "Assigned", "In Progress", "Escalated", "Completed", "Cancelled", "Awaiting review", "Verified", "Rejected"
+        };
+
+        if (!validStatuses.Contains(dto.Status))
+        {
+            return BadRequest(new { error = $"Status must be one of: {string.Join(", ", validStatuses)}." });
+        }
+
+        var updated = await _service.UpdateStatusAsync(id, dto, cancellationToken);
+        if (updated == null)
+        {
+            return NotFound(new { error = $"Assistance request '{id}' was not found." });
+        }
+
+        _logger.LogInformation("Assistance request {Id} status updated to {Status}", id, dto.Status);
+        return Ok(updated);
     }
 
     /// <summary>
-    /// Assign an assistance request to a response team or field officer.
-    /// </summary>
-    [HttpPost("{id}/assign")]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> AssignRequest(string id, [FromBody] AssignRequestDto request)
-    {
-        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "Coordinator";
-        var result = await _requestService.AssignRequestAsync(id, request, actor);
-        if (!result.Success) return BadRequest(result);
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Modify the operational response priority of an assistance request.
+    /// Overrides or escalates the priority level of an assistance request with justification (Admin / Coordinator).
     /// </summary>
     [HttpPatch("{id}/priority")]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<AssistanceRequestDto>), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> UpdatePriority(string id, [FromBody] UpdateRequestPriorityDto request)
+    [ProducesResponseType(typeof(ApiResponse<AdminDtos.AssistanceRequestDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdatePriority(
+        string id,
+        [FromBody] AdminDtos.UpdateRequestPriorityDto dto)
     {
         var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "Coordinator";
-        var result = await _requestService.UpdatePriorityAsync(id, request, actor);
+        var result = await _service.UpdatePriorityAsync(id, dto, actor);
         if (!result.Success) return BadRequest(result);
         return Ok(result);
     }
 
     /// <summary>
-    /// Delete an assistance request record.
+    /// Deletes an assistance request.
     /// </summary>
     [HttpDelete("{id}")]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin}")]
-    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> DeleteRequest(string id)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken)
     {
-        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "Admin";
-        var result = await _requestService.DeleteRequestAsync(id, actor);
-        if (!result.Success) return BadRequest(result);
-        return Ok(result);
+        var deleted = await _service.DeleteAsync(id, cancellationToken);
+        if (!deleted)
+        {
+            return NotFound(new { error = $"Assistance request '{id}' was not found." });
+        }
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Resets assistance requests and metrics back to initial seed data.
+    /// </summary>
+    [HttpPost("reset")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Reset(CancellationToken cancellationToken)
+    {
+        await _service.ResetDataAsync(cancellationToken);
+        var metrics = await _service.GetMetricsAsync(cancellationToken);
+        return Ok(new { message = "Assistance requests reset to default baseline.", metrics });
     }
 }

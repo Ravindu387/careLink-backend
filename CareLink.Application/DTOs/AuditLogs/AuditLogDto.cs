@@ -12,6 +12,28 @@ public class AuditLogDto
     public string Change { get; set; } = string.Empty;
     public string Rationale { get; set; } = string.Empty;
     public string Type { get; set; } = "System";
+
+    private string? _actionType;
+    public string ActionType
+    {
+        get => _actionType ?? Action;
+        set => _actionType = value;
+    }
+
+    private string? _recordType;
+    public string RecordType
+    {
+        get => _recordType ?? Type;
+        set => _recordType = value;
+    }
+
+    private string? _date;
+    public string Date
+    {
+        get => _date ?? CreatedAt.ToString("yyyy-MM-dd");
+        set => _date = value;
+    }
+
     public string Environment { get; set; } = "Production";
     public string? IpAddress { get; set; }
     public string? Metadata { get; set; }

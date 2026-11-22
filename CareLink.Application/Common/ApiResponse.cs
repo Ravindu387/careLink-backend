@@ -18,6 +18,11 @@ public class ApiResponse<T>
         };
     }
 
+    public static ApiResponse<T> SuccessResponse(T data, string message = "Success")
+    {
+        return SuccessResult(data, message);
+    }
+
     public static ApiResponse<T> FailureResult(string message, List<string>? errors = null)
     {
         return new ApiResponse<T>
@@ -27,5 +32,10 @@ public class ApiResponse<T>
             Data = default,
             Errors = errors ?? [message]
         };
+    }
+
+    public static ApiResponse<T> ErrorResponse(string message, List<string>? errors = null)
+    {
+        return FailureResult(message, errors);
     }
 }

@@ -4,4 +4,5 @@
   <Project Path="CareLink.Core/CareLink.Core.csproj" />
   <Project Path="CareLink.Infrastructure/CareLink.Infrastructure.csproj" />
   <Project Path="CareLink.Tests/CareLink.Tests.csproj" />
+  <Project Path="CareLink.Backend.csproj" />
 </Solution>
