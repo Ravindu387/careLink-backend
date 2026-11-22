@@ -21,8 +21,9 @@ public class SecuritySettingsDto
 {
     public string? CurrentPassword { get; set; }
     public string? NewPassword { get; set; }
-    public bool TwoFactor { get; set; }
-    public bool LoginAlerts { get; set; }
+    public bool TwoFactor { get; set; } = true;
+    public string SessionTimeout { get; set; } = "30 minutes";
+    public bool LoginAlerts { get; set; } = true;
 }
 
 public class NotificationSettingsDto

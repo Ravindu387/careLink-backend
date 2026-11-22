@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using CareLink.Application.Common;
 using CareLink.Application.DTOs;
 using CareLink.Application.DTOs.Users;
@@ -13,21 +14,25 @@ namespace CareLink.API.Controllers;
 
 [ApiController]
 [Route("api/notifications")]
+[Route("api/citizen/notifications")]
 public class NotificationsController : ControllerBase
 {
     private readonly INotificationService _service;
+    private readonly ICitizenNotificationService _citizenService;
     private readonly ILogger<NotificationsController> _logger;
 
     public NotificationsController(
         INotificationService service,
+        ICitizenNotificationService citizenService,
         ILogger<NotificationsController> logger)
     {
         _service = service;
+        _citizenService = citizenService;
         _logger = logger;
     }
 
     /// <summary>
-    /// Retrieves notifications. Supports paged coordinator queries, administrative queries, and shelter/funding filters.
+    /// Retrieves notifications. Supports paged coordinator queries, administrative queries, shelter/funding filters, and citizen notifications.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(PagedNotificationsDto), StatusCodes.Status200OK)]
@@ -38,8 +43,16 @@ public class NotificationsController : ControllerBase
         [FromQuery] int? pageNumber,
         [FromQuery] int? pageSize,
         [FromQuery] bool? paged,
+        [FromQuery] string? citizenName,
+        [FromQuery] string? category,
         CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(citizenName) || HttpContext.Request.Path.Value?.Contains("/citizen/") == true)
+        {
+            var result = await _citizenService.GetNotificationsAsync(citizenName, category, query.UnreadOnly, query.Search);
+            return Ok(result);
+        }
+
         if (!string.IsNullOrWhiteSpace(type) || pageNumber.HasValue || pageSize.HasValue)
         {
             var adminQuery = new AdminDtos.NotificationQueryDto
@@ -64,8 +77,8 @@ public class NotificationsController : ControllerBase
             return Ok(list);
         }
 
-        var result = await _service.GetPagedNotificationsAsync(query, cancellationToken);
-        return Ok(result);
+        var res = await _service.GetPagedNotificationsAsync(query, cancellationToken);
+        return Ok(res);
     }
 
     /// <summary>
@@ -94,13 +107,20 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
-    /// Gets aggregated summary counts for notifications (Shelter & Funding).
+    /// Gets aggregated summary counts for notifications (Shelter & Funding, and Citizen).
     /// </summary>
     [HttpGet("summary")]
-    public async Task<ActionResult<NotificationSummaryDto>> GetSummary(
+    public async Task<IActionResult> GetSummary(
         [FromQuery] string? role = "ShelterAdmin",
+        [FromQuery] string? citizenName = null,
         CancellationToken cancellationToken = default)
     {
+        if (!string.IsNullOrWhiteSpace(citizenName) || HttpContext.Request.Path.Value?.Contains("/citizen/") == true)
+        {
+            var citizenSummary = await _citizenService.GetSummaryAsync(citizenName);
+            return Ok(citizenSummary);
+        }
+
         var summary = await _service.GetSummaryAsync(role, cancellationToken);
         return Ok(summary);
     }
@@ -196,6 +216,16 @@ public class NotificationsController : ControllerBase
         string id,
         CancellationToken cancellationToken)
     {
+        if (HttpContext.Request.Path.Value?.Contains("/citizen/") == true)
+        {
+            var citizenRes = await _citizenService.GetNotificationByIdAsync(id);
+            if (!citizenRes.Success)
+            {
+                return NotFound(citizenRes);
+            }
+            return Ok(citizenRes);
+        }
+
         if (int.TryParse(id, out var intId))
         {
             var itemById = await _service.GetNotificationByIdAsync(intId, cancellationToken);
@@ -203,12 +233,18 @@ public class NotificationsController : ControllerBase
         }
 
         var item = await _service.GetByIdAsync(id, cancellationToken);
-        if (item == null)
+        if (item != null)
         {
-            return NotFound(new { message = $"Notification '{id}' not found." });
+            return Ok(item);
         }
 
-        return Ok(item);
+        var fallback = await _citizenService.GetNotificationByIdAsync(id);
+        if (fallback.Success)
+        {
+            return Ok(fallback);
+        }
+
+        return NotFound(new { message = $"Notification '{id}' not found." });
     }
 
     /// <summary>
@@ -220,6 +256,16 @@ public class NotificationsController : ControllerBase
         string id,
         CancellationToken cancellationToken)
     {
+        if (HttpContext.Request.Path.Value?.Contains("/citizen/") == true)
+        {
+            var res = await _citizenService.MarkAsReadAsync(id);
+            if (!res.Success)
+            {
+                return NotFound(res);
+            }
+            return Ok(res);
+        }
+
         if (int.TryParse(id, out var intId))
         {
             var successInt = await _service.MarkAsReadAsync(intId, cancellationToken);
@@ -227,23 +273,38 @@ public class NotificationsController : ControllerBase
         }
 
         var success = await _service.MarkReadAsync(id, cancellationToken);
-        if (!success)
+        if (success)
         {
-            return NotFound(new { message = $"Notification '{id}' not found." });
+            return Ok(new { id, unread = false, message = "Notification marked as read." });
         }
 
-        return Ok(new { id, unread = false, message = "Notification marked as read." });
+        var cResult = await _citizenService.MarkAsReadAsync(id);
+        if (cResult.Success)
+        {
+            return Ok(cResult);
+        }
+
+        return NotFound(new { message = $"Notification '{id}' not found." });
     }
+
 
     /// <summary>
     /// Marks all notifications as read.
     /// </summary>
     [HttpPost("mark-all-read")]
+    [HttpPatch("mark-all-read")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> MarkAllRead(
         [FromQuery] string? role,
+        [FromQuery] string? citizenName,
         CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(citizenName) || HttpContext.Request.Path.Value?.Contains("/citizen/") == true)
+        {
+            var citizenRes = await _citizenService.MarkAllAsReadAsync(citizenName);
+            return Ok(citizenRes);
+        }
+
         var effectiveRole = DetermineRole(role);
         var updatedCount = await _service.MarkAllReadAsync(effectiveRole, cancellationToken);
         _logger.LogInformation("Marked all notifications as read ({Count} updated) for role {Role}.", updatedCount, effectiveRole ?? "all");
@@ -251,16 +312,45 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
+    /// Marks all notifications as read (alternative route).
+    /// </summary>
+    [HttpPost("mark-all-as-read")]
+    public Task<IActionResult> MarkAllAsRead(
+        [FromQuery] string? role,
+        [FromQuery] string? citizenName,
+        CancellationToken cancellationToken)
+    {
+        return MarkAllRead(role, citizenName, cancellationToken);
+    }
+
+    /// <summary>
     /// Creates and dispatches a new notification.
     /// </summary>
     [HttpPost]
     public async Task<IActionResult> Create(
-        [FromBody] CreateNotificationDto dto,
+        [FromBody] JsonElement raw,
         CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid)
+        var jsonText = raw.GetRawText();
+
+        if (raw.TryGetProperty("citizenName", out _) || HttpContext.Request.Path.Value?.Contains("/citizen/") == true)
         {
-            return BadRequest(ModelState);
+            var citizenReq = JsonSerializer.Deserialize<CreateNotificationRequest>(jsonText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (citizenReq != null)
+            {
+                var result = await _citizenService.CreateNotificationAsync(citizenReq);
+                if (!result.Success)
+                {
+                    return BadRequest(result);
+                }
+                return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
+            }
+        }
+
+        var dto = JsonSerializer.Deserialize<CreateNotificationDto>(jsonText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        if (dto == null || string.IsNullOrWhiteSpace(dto.Title))
+        {
+            return BadRequest(new { error = "Notification title is required." });
         }
 
         try
@@ -286,6 +376,16 @@ public class NotificationsController : ControllerBase
         string id,
         CancellationToken cancellationToken)
     {
+        if (HttpContext.Request.Path.Value?.Contains("/citizen/") == true)
+        {
+            var cResult = await _citizenService.DeleteNotificationAsync(id);
+            if (!cResult.Success)
+            {
+                return NotFound(cResult);
+            }
+            return Ok(cResult);
+        }
+
         bool deleted;
         if (int.TryParse(id, out var intId))
         {
@@ -296,12 +396,18 @@ public class NotificationsController : ControllerBase
             deleted = await _service.DeleteAsync(id, cancellationToken);
         }
 
-        if (!deleted)
+        if (deleted)
         {
-            return NotFound(new { message = $"Notification '{id}' not found." });
+            return Ok(new { id, message = $"Notification '{id}' deleted successfully." });
         }
 
-        return Ok(new { id, message = $"Notification '{id}' deleted successfully." });
+        var fallback = await _citizenService.DeleteNotificationAsync(id);
+        if (fallback.Success)
+        {
+            return Ok(fallback);
+        }
+
+        return NotFound(new { message = $"Notification '{id}' not found." });
     }
 
     /// <summary>

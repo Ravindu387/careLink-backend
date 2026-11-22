@@ -1,3 +1,4 @@
+using CareLink.Application.Common;
 using CareLink.Application.DTOs;
 using CareLink.Core.Models;
 
@@ -30,4 +31,21 @@ public interface IShelterService
     Task<PagedResultDto<ShelterDto>> GetSheltersPagedAsync(ShelterQueryParameters parameters, CancellationToken cancellationToken = default);
     Task<ShelterSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default);
     Task<ShelterDto> CreateShelterAsync(CreateShelterDto dto, CancellationToken cancellationToken = default);
+
+    // Citizen & Community Methods (Oshadi)
+    Task<ApiResponse<IEnumerable<ShelterDto>>> GetSheltersAsync(
+        string? search = null,
+        string? area = null,
+        double? maxDistance = null,
+        string? availability = null,
+        bool? accessibleOnly = null,
+        string? service = null);
+
+    Task<ApiResponse<ShelterDto>> GetByIdAsync(string id);
+    Task<ApiResponse<ShelterDto>> CreateAsync(CreateShelterRequest request);
+    Task<ApiResponse<ShelterDto>> UpdateAsync(string id, UpdateShelterRequest request);
+    Task<ApiResponse<bool>> DeleteAsync(string id);
+    Task<ApiResponse<ShelterSummaryDto>> GetCitizenSummaryAsync(string? citizenLocation = null);
+    Task<ApiResponse<ShelterBookingDto>> RequestSpaceAsync(RequestShelterSpacePayload request, string? citizenName = null);
+    Task<ApiResponse<IEnumerable<ShelterBookingDto>>> GetCitizenBookingsAsync(string? citizenName = null);
 }

@@ -10,14 +10,14 @@ namespace CareLink.Application.Services;
 public class ResourceService : IResourceService
 {
     private readonly IResourceRepository _repository;
-    private readonly IShelterRepository _shelterRepository;
+    private readonly CareLink.Core.Interfaces.IShelterRepository _shelterRepository;
     private static int _itemCounter = 8;
     private static int _requestCounter = 43;
     private static readonly object _counterLock = new();
 
     public ResourceService(
         IResourceRepository repository,
-        IShelterRepository shelterRepository)
+        CareLink.Core.Interfaces.IShelterRepository shelterRepository)
     {
         _repository = repository;
         _shelterRepository = shelterRepository;
@@ -139,13 +139,13 @@ public class ResourceService : IResourceService
         {
             Id = reqId,
             ResourceName = dto.ResourceName.Trim(),
-            Quantity = dto.Quantity,
+            Quantity = dto.Quantity.ToString(),
             OperationalArea = dto.OperationalArea.Trim(),
             Priority = dto.Priority ?? "Normal",
             Status = "Pending",
             RequestedBy = "Emergency Coordinator",
             Notes = dto.Notes?.Trim(),
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTime.UtcNow,
         };
 
         var created = await _repository.CreateRequestAsync(req, cancellationToken);
@@ -153,7 +153,7 @@ public class ResourceService : IResourceService
         {
             Id = created.Id,
             ResourceName = created.ResourceName,
-            Quantity = created.Quantity,
+            Quantity = int.TryParse(created.Quantity, out var q1) ? q1 : 0,
             OperationalArea = created.OperationalArea,
             Priority = created.Priority,
             Status = created.Status,
@@ -171,7 +171,7 @@ public class ResourceService : IResourceService
         {
             Id = r.Id,
             ResourceName = r.ResourceName,
-            Quantity = r.Quantity,
+            Quantity = int.TryParse(r.Quantity, out var q2) ? q2 : 0,
             OperationalArea = r.OperationalArea,
             Priority = r.Priority,
             Status = r.Status,

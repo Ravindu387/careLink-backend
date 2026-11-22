@@ -4,15 +4,19 @@ using CareLink.Core.Models;
 
 namespace CareLink.Infrastructure.Repositories;
 
-public class InMemoryShelterRepository : IShelterRepository
+public class InMemoryShelterRepository : CareLink.Core.Interfaces.IShelterRepository, CareLink.Application.Interfaces.IShelterRepository
 {
     private readonly object _lock = new();
     private List<Shelter> _shelters;
+    private readonly List<ShelterBooking> _bookings = new();
+    private int _bookingCounter = 1001;
 
     public InMemoryShelterRepository()
     {
         _shelters = CreateDefaultShelters();
     }
+
+    #region Operational & Coordinator Methods (Safna / Core)
 
     public Task<IReadOnlyList<Shelter>> GetAllAsync(
         ShelterFilterParams? filter = null,
@@ -31,6 +35,8 @@ public class InMemoryShelterRepository : IShelterRepository
                         item.Name.ToLowerInvariant().Contains(s) ||
                         item.Location.ToLowerInvariant().Contains(s) ||
                         item.District.ToLowerInvariant().Contains(s) ||
+                        item.Area.ToLowerInvariant().Contains(s) ||
+                        item.Address.ToLowerInvariant().Contains(s) ||
                         item.Services.Any(svc => svc.ToLowerInvariant().Contains(s)) ||
                         (item.Notes != null && item.Notes.ToLowerInvariant().Contains(s)));
                 }
@@ -41,7 +47,8 @@ public class InMemoryShelterRepository : IShelterRepository
                 {
                     query = query.Where(item =>
                         item.Location.Equals(filter.Area.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                        item.District.Equals(filter.Area.Trim(), StringComparison.OrdinalIgnoreCase));
+                        item.District.Equals(filter.Area.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                        item.Area.Equals(filter.Area.Trim(), StringComparison.OrdinalIgnoreCase));
                 }
 
                 if (!string.IsNullOrWhiteSpace(filter.Status) &&
@@ -56,7 +63,8 @@ public class InMemoryShelterRepository : IShelterRepository
                     !filter.Availability.Equals("Any availability", StringComparison.OrdinalIgnoreCase) &&
                     !filter.Availability.Equals("All", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (filter.Availability.Equals("Available", StringComparison.OrdinalIgnoreCase))
+                    if (filter.Availability.Equals("Available", StringComparison.OrdinalIgnoreCase) ||
+                        filter.Availability.Equals("Space available", StringComparison.OrdinalIgnoreCase))
                     {
                         query = query.Where(item => item.Remaining > 0);
                     }
@@ -106,7 +114,9 @@ public class InMemoryShelterRepository : IShelterRepository
             var shelter = _shelters.FirstOrDefault(s => s.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
             if (shelter == null && int.TryParse(id, out var intId))
             {
-                return GetByIdAsync(intId, cancellationToken);
+                var idStr = intId.ToString();
+                var code = $"SH-{intId:D3}";
+                shelter = _shelters.FirstOrDefault(s => s.Id == idStr || s.Id == code);
             }
             return Task.FromResult(shelter == null ? null : CloneShelter(shelter));
         }
@@ -144,6 +154,12 @@ public class InMemoryShelterRepository : IShelterRepository
         lock (_lock)
         {
             var existing = _shelters.FirstOrDefault(s => s.Id.Equals(shelter.Id, StringComparison.OrdinalIgnoreCase));
+            if (existing == null && int.TryParse(shelter.Id, out var num))
+            {
+                var code = $"SH-{num:D3}";
+                existing = _shelters.FirstOrDefault(s => s.Id.Equals(code, StringComparison.OrdinalIgnoreCase));
+            }
+
             if (existing == null)
             {
                 return Task.FromResult<Shelter?>(null);
@@ -161,6 +177,11 @@ public class InMemoryShelterRepository : IShelterRepository
             existing.Status = ComputeStatus(existing.Capacity, existing.CurrentOccupancy);
             existing.ContactPhone = shelter.ContactPhone?.Trim() ?? string.Empty;
             existing.Notes = shelter.Notes?.Trim();
+            if (!string.IsNullOrWhiteSpace(shelter.Address)) existing.Address = shelter.Address.Trim();
+            if (shelter.Distance > 0) existing.Distance = shelter.Distance;
+            existing.Accessible = shelter.Accessible;
+            if (!string.IsNullOrWhiteSpace(shelter.OperatingHours)) existing.OperatingHours = shelter.OperatingHours.Trim();
+            existing.IsEvacuationHub = shelter.IsEvacuationHub;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
 
             return Task.FromResult<Shelter?>(CloneShelter(existing));
@@ -231,17 +252,16 @@ public class InMemoryShelterRepository : IShelterRepository
 
             var metrics = new ShelterMetrics
             {
-                OperationalShelters = operational + 34, // Incorporates baseline operational grid
-                TotalCapacity = totalCap >= 11420 ? totalCap : 11420,
-                TotalOccupied = totalOcc >= 8642 ? totalOcc : 8642 + totalOcc,
-                AvailableSpaces = available > 0 ? available : 2778,
-                AcceptingArrivals = accepting,
+                TotalShelters = _shelters.Count,
+                TotalCapacity = totalCap,
+                CurrentOccupancy = totalOcc,
+                AvailableCapacity = available,
+                AcceptingCount = accepting,
                 NearCapacityCount = nearCap,
                 FullCount = full,
-                TotalShelters = _shelters.Count,
+                OperationalCount = operational,
                 LastUpdated = DateTimeOffset.UtcNow
             };
-
             return Task.FromResult(metrics);
         }
     }
@@ -251,6 +271,8 @@ public class InMemoryShelterRepository : IShelterRepository
         lock (_lock)
         {
             _shelters = CreateDefaultShelters();
+            _bookings.Clear();
+            _bookingCounter = 1001;
             return Task.CompletedTask;
         }
     }
@@ -270,8 +292,9 @@ public class InMemoryShelterRepository : IShelterRepository
                     item.Name.ToLowerInvariant().Contains(s) ||
                     item.Location.ToLowerInvariant().Contains(s) ||
                     item.District.ToLowerInvariant().Contains(s) ||
-                    item.Manager.ToLowerInvariant().Contains(s) ||
-                    item.Id.ToLowerInvariant().Contains(s));
+                    item.Area.ToLowerInvariant().Contains(s) ||
+                    item.Address.ToLowerInvariant().Contains(s) ||
+                    item.Services.Any(svc => svc.ToLowerInvariant().Contains(s)));
             }
 
             if (!string.IsNullOrWhiteSpace(parameters.District) &&
@@ -331,6 +354,126 @@ public class InMemoryShelterRepository : IShelterRepository
         }
     }
 
+    #endregion
+
+    #region Citizen & Extended Shelter Methods (Oshadi)
+
+    public Task<IEnumerable<Shelter>> GetSheltersAsync(
+        string? search = null,
+        string? area = null,
+        double? maxDistance = null,
+        string? availability = null,
+        bool? accessibleOnly = null,
+        string? service = null)
+    {
+        lock (_lock)
+        {
+            var query = _shelters.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                query = query.Where(s =>
+                    s.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    s.Area.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    s.Address.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    s.Location.Contains(term, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!string.IsNullOrWhiteSpace(area) && !area.Equals("All", StringComparison.OrdinalIgnoreCase) && !area.Equals("All areas", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(s => s.Area.Equals(area.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                                         s.Location.Equals(area.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                                         s.District.Equals(area.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (maxDistance.HasValue)
+            {
+                query = query.Where(s => s.Distance <= maxDistance.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(availability) && !availability.Equals("All statuses", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(s => s.Status.Equals(availability.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (accessibleOnly == true)
+            {
+                query = query.Where(s => s.Accessible);
+            }
+
+            if (!string.IsNullOrWhiteSpace(service) && !service.Equals("All services", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(s => s.Services.Any(sv => sv.Contains(service.Trim(), StringComparison.OrdinalIgnoreCase)));
+            }
+
+            var results = query.OrderBy(s => s.Distance).Select(CloneShelter).ToList();
+            return Task.FromResult<IEnumerable<Shelter>>(results);
+        }
+    }
+
+    public Task<Shelter> CreateAsync(Shelter shelter)
+    {
+        return AddAsync(shelter);
+    }
+
+    public Task<Shelter?> UpdateAsync(string id, Shelter shelter)
+    {
+        shelter.Id = id;
+        return UpdateAsync(shelter);
+    }
+
+    public Task<ShelterBooking> CreateBookingAsync(ShelterBooking booking)
+    {
+        lock (_lock)
+        {
+            if (string.IsNullOrWhiteSpace(booking.Id))
+            {
+                booking.Id = $"SH-RES-{_bookingCounter++}";
+            }
+            booking.BookedAt = DateTime.UtcNow;
+            _bookings.Add(booking);
+
+            var shelter = _shelters.FirstOrDefault(s => s.Id.Equals(booking.ShelterId, StringComparison.OrdinalIgnoreCase));
+            if (shelter == null && int.TryParse(booking.ShelterId, out var num))
+            {
+                var code = $"SH-{num:D3}";
+                shelter = _shelters.FirstOrDefault(s => s.Id.Equals(code, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (shelter != null)
+            {
+                shelter.CurrentOccupancy = Math.Min(shelter.Capacity, shelter.CurrentOccupancy + booking.NumberOfPeople);
+                shelter.Status = shelter.Remaining > 0 ? "Space available" : "Full";
+                shelter.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+
+            return Task.FromResult(booking);
+        }
+    }
+
+    public Task<IEnumerable<ShelterBooking>> GetBookingsAsync(string? citizenName = null)
+    {
+        lock (_lock)
+        {
+            var query = _bookings.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(citizenName))
+            {
+                query = query.Where(b => b.CitizenName.Equals(citizenName.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+            var results = query.OrderByDescending(b => b.BookedAt).ToList();
+            return Task.FromResult<IEnumerable<ShelterBooking>>(results);
+        }
+    }
+
+    Task<Shelter?> CareLink.Application.Interfaces.IShelterRepository.GetByIdAsync(string id) =>
+        GetByIdAsync(id, CancellationToken.None);
+
+    Task<bool> CareLink.Application.Interfaces.IShelterRepository.DeleteAsync(string id) =>
+        DeleteAsync(id, CancellationToken.None);
+
+    #endregion
+
     #region Helpers & Seed Data
 
     private static string ComputeStatus(int capacity, int occupied)
@@ -363,6 +506,11 @@ public class InMemoryShelterRepository : IShelterRepository
             Status = s.Status,
             ContactPhone = s.ContactPhone,
             Notes = s.Notes,
+            Address = s.Address,
+            Distance = s.Distance,
+            Accessible = s.Accessible,
+            OperatingHours = s.OperatingHours,
+            IsEvacuationHub = s.IsEvacuationHub,
             CreatedAt = s.CreatedAt,
             UpdatedAt = s.UpdatedAt
         };
@@ -378,13 +526,18 @@ public class InMemoryShelterRepository : IShelterRepository
                 Name = "Riverton High School",
                 Location = "Central Ward",
                 District = "Central Ward",
+                Address = "45 College Road, Central Ward, Greater Riverton",
+                Distance = 1.4,
                 Type = "Public School",
                 Manager = "Brenda Silva",
                 Capacity = 660,
                 CurrentOccupancy = 612,
-                Services = new List<string> { "Accessible", "Medical" },
+                Services = new List<string> { "Accessible", "Medical", "Families", "Food" },
                 Status = "Near Capacity",
+                Accessible = true,
                 ContactPhone = "+94 77 412 8041",
+                OperatingHours = "24 Hours · Evacuation Centre",
+                IsEvacuationHub = true,
                 Notes = "Primary central ward emergency reception facility with wheelchair ramps and backup power."
             },
             new()
@@ -393,13 +546,18 @@ public class InMemoryShelterRepository : IShelterRepository
                 Name = "North Community Hall",
                 Location = "North Ward",
                 District = "North Ward",
+                Address = "12 Market Road, North Ward, Greater Riverton",
+                Distance = 2.2,
                 Type = "Community Centre",
                 Manager = "Marcus Vance",
                 Capacity = 500,
                 CurrentOccupancy = 284,
-                Services = new List<string> { "Accessible", "Food" },
+                Services = new List<string> { "Accessible", "Food", "Pets", "Childcare", "Blankets" },
                 Status = "Operational",
+                Accessible = true,
                 ContactPhone = "+94 77 412 8022",
+                OperatingHours = "24 Hours · Open Intake",
+                IsEvacuationHub = true,
                 Notes = "Active hot meal kitchen on site. Direct access for transport vans."
             },
             new()
@@ -408,13 +566,18 @@ public class InMemoryShelterRepository : IShelterRepository
                 Name = "St. Mary's Civic Centre",
                 Location = "Eastbank",
                 District = "Eastbank",
+                Address = "14 Church Street, Eastbank",
+                Distance = 2.8,
                 Type = "Civic Centre",
                 Manager = "Sister Theresa",
                 Capacity = 450,
                 CurrentOccupancy = 450,
-                Services = new List<string> { "Medical", "Childcare" },
+                Services = new List<string> { "Medical", "Childcare", "Psychosocial support" },
                 Status = "Full",
+                Accessible = false,
                 ContactPhone = "+94 77 412 8033",
+                OperatingHours = "Capacity Reached (Referrals to North Hall)",
+                IsEvacuationHub = false,
                 Notes = "Currently at 100% capacity. Redirecting newly displaced families to North Community Hall."
             },
             new()
@@ -423,13 +586,18 @@ public class InMemoryShelterRepository : IShelterRepository
                 Name = "Lakeside Sports Hall",
                 Location = "West District",
                 District = "West District",
+                Address = "88 Lake Circular Road, West District",
+                Distance = 3.8,
                 Type = "Sports Complex",
                 Manager = "David Perera",
                 Capacity = 400,
                 CurrentOccupancy = 196,
-                Services = new List<string> { "Food", "Family rooms" },
+                Services = new List<string> { "Food", "Family rooms", "Shower facilities" },
                 Status = "Operational",
+                Accessible = false,
                 ContactPhone = "+94 77 412 8044",
+                OperatingHours = "06:00 - 22:00 (Security on site 24/7)",
+                IsEvacuationHub = false,
                 Notes = "Equipped with family partitions, laundry, and clean shower blocks."
             },
             new()
@@ -438,43 +606,118 @@ public class InMemoryShelterRepository : IShelterRepository
                 Name = "Central Ward Stadium Pavilion",
                 Location = "Central Ward",
                 District = "Central Ward",
+                Address = "10 Stadium Avenue, Central Ward",
+                Distance = 2.0,
                 Type = "Sports Pavilion",
                 Manager = "Capt. Rohan Sen",
                 Capacity = 1200,
                 CurrentOccupancy = 820,
                 Services = new List<string> { "Accessible", "Food", "Medical", "Family rooms" },
                 Status = "Operational",
+                Accessible = true,
                 ContactPhone = "+94 77 412 8055",
+                OperatingHours = "24/7 during crisis operations",
+                IsEvacuationHub = true,
                 Notes = "Main high-capacity staging dome equipped with field medical tent and triage."
             },
             new()
             {
                 Id = "SH-006",
-                Name = "Eastbank Technical College",
-                Location = "Eastbank",
-                District = "Eastbank",
-                Type = "Vocational School",
-                Manager = "Kamal Jayasuriya",
+                Name = "West District Youth Centre",
+                Location = "West District",
+                District = "West District",
+                Address = "5 Youth Lane, West District",
+                Distance = 4.2,
+                Type = "Community Centre",
+                Manager = "Kamal Hettiarachchi",
                 Capacity = 350,
-                CurrentOccupancy = 310,
-                Services = new List<string> { "Accessible", "Food" },
-                Status = "Near Capacity",
+                CurrentOccupancy = 120,
+                Services = new List<string> { "Food", "Mental Health Support" },
+                Status = "Operational",
+                Accessible = true,
                 ContactPhone = "+94 77 412 8066",
-                Notes = "High intake rate from Eastbank river overflow zone. Monitoring capacity closely."
+                OperatingHours = "24/7 during crisis operations",
+                IsEvacuationHub = false,
+                Notes = "Offers specialized youth trauma counselors and quiet study rooms."
             },
             new()
             {
                 Id = "SH-007",
-                Name = "West District Community Shelter",
+                Name = "Riverton Port Authority Warehouse 3",
+                Location = "Eastbank",
+                District = "Eastbank",
+                Address = "Dock 3, Riverton Port, Eastbank",
+                Distance = 5.1,
+                Type = "Temporary Shelter",
+                Manager = "Lt. Dinesh Jayawardena",
+                Capacity = 800,
+                CurrentOccupancy = 780,
+                Services = new List<string> { "Food", "Medical", "Logistics Hub" },
+                Status = "Near Capacity",
+                Accessible = false,
+                ContactPhone = "+94 77 412 8077",
+                OperatingHours = "24/7 Logistics & Shelter",
+                IsEvacuationHub = true,
+                Notes = "Emergency intake shelter directly connected to the river supply barge."
+            },
+            new()
+            {
+                Id = "SH-008",
+                Name = "North Ward Primary School",
+                Location = "North Ward",
+                District = "North Ward",
+                Address = "25 School Road, North Ward",
+                Distance = 3.1,
+                Type = "Public School",
+                Manager = "Anoma Fonseka",
+                Capacity = 450,
+                CurrentOccupancy = 210,
+                Services = new List<string> { "Accessible", "Food", "Childcare" },
+                Status = "Operational",
+                Accessible = true,
+                ContactPhone = "+94 77 412 8088",
+                OperatingHours = "24/7 during crisis operations",
+                IsEvacuationHub = false,
+                Notes = "Primary evacuation site for displaced school-age families."
+            },
+            new()
+            {
+                Id = "SH-009",
+                Name = "Eastbank Community Clinic Auxiliary Hall",
+                Location = "Eastbank",
+                District = "Eastbank",
+                Address = "9 Hospital Road, Eastbank",
+                Distance = 2.9,
+                Type = "Medical Shelter",
+                Manager = "Dr. Priyantha Silva",
+                Capacity = 200,
+                CurrentOccupancy = 195,
+                Services = new List<string> { "Accessible", "Medical", "Special Needs" },
+                Status = "Near Capacity",
+                Accessible = true,
+                ContactPhone = "+94 77 412 8099",
+                OperatingHours = "24/7 Medical Clinic & Shelter",
+                IsEvacuationHub = false,
+                Notes = "Specialized for elderly, infirm, and post-operative patients."
+            },
+            new()
+            {
+                Id = "SH-010",
+                Name = "Greenfield Community Hall",
                 Location = "West District",
                 District = "West District",
+                Address = "72 Greenfield Road, West District",
+                Distance = 4.8,
                 Type = "Community Shelter",
                 Manager = "Nisha Weerasinghe",
                 Capacity = 300,
                 CurrentOccupancy = 150,
                 Services = new List<string> { "Food", "Childcare" },
                 Status = "Operational",
+                Accessible = true,
                 ContactPhone = "+94 77 412 8077",
+                OperatingHours = "24/7 during crisis operations",
+                IsEvacuationHub = false,
                 Notes = "Dedicated mother-and-child support hub with pediatric supplies."
             }
         };

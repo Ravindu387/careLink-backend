@@ -10,11 +10,11 @@ namespace CareLink.Application.Services;
 public class ResidentService : IResidentService
 {
     private readonly IResidentRepository _residentRepository;
-    private readonly IShelterRepository _shelterRepository;
+    private readonly CareLink.Core.Interfaces.IShelterRepository _shelterRepository;
 
     public ResidentService(
         IResidentRepository residentRepository,
-        IShelterRepository shelterRepository)
+        CareLink.Core.Interfaces.IShelterRepository shelterRepository)
     {
         _residentRepository = residentRepository;
         _shelterRepository = shelterRepository;

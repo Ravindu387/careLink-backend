@@ -40,4 +40,14 @@ public interface ISettingsService
     Task<bool> UpdateSecuritySettingsAsync(SecuritySettingsDto dto);
     Task<NotificationSettingsDto> GetNotificationSettingsAsync();
     Task<NotificationSettingsDto> UpdateNotificationSettingsAsync(NotificationSettingsDto dto);
+
+    // Resource Manager Settings (Oshadi)
+    Task<ApiResponse<ResourceManagerSettingsDto>> GetResourceManagerSettingsAsync();
+    Task<ApiResponse<ResourceManagerSettingsDto>> UpdateSettingsAsync(UpdateSettingsRequest request);
+    Task<ApiResponse<ResourceManagerSettingsDto>> ResetSettingsAsync();
+    Task<ApiResponse<ProfileSettingsDto>> UpdateProfileAsync(ProfileSettingsDto dto);
+    Task<ApiResponse<InventoryRulesSettingsDto>> UpdateInventoryRulesAsync(InventoryRulesSettingsDto dto);
+    Task<ApiResponse<DispatchPreferencesSettingsDto>> UpdateDispatchPreferencesAsync(DispatchPreferencesSettingsDto dto);
+    Task<ApiResponse<NotificationPreferencesSettingsDto>> UpdateNotificationPreferencesAsync(NotificationPreferencesSettingsDto dto);
+    Task<ApiResponse<SecuritySettingsDto>> UpdateResourceManagerSecuritySettingsAsync(SecuritySettingsDto dto);
 }

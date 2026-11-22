@@ -14,4 +14,8 @@ public class NotificationSummaryDto
     public int ExpenditureCount { get; set; }
     public int ReportsCount { get; set; }
     public int TotalCount { get; set; }
+
+    // Citizen Portal Summary counts
+    public int SafetyAlertsCount { get; set; }
+    public int MyRequestsCount { get; set; }
 }

@@ -56,13 +56,3 @@ public class UpdateLanguageRequest
 {
     public string Language { get; set; } = "EN";
 }
-
-public class CreateNotificationRequest
-{
-    public string Title { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
-    public string Category { get; set; } = "Incident";
-    public string Severity { get; set; } = "Warning";
-    public string? ActionUrl { get; set; }
-    public string? ActionLabel { get; set; }
-}

@@ -3,11 +3,12 @@ using CareLink.Core.Interfaces;
 
 namespace CareLink.Infrastructure.Repositories;
 
-public class InMemorySettingsRepository : ISettingsRepository
+public class InMemorySettingsRepository : CareLink.Core.Interfaces.ISettingsRepository, CareLink.Application.Interfaces.ISettingsRepository
 {
     private readonly object _lock = new();
     private CoordinatorSettings _coordinatorSettings;
     private PartnerSettings _partnerSettings;
+    private ResourceManagerSettings _resourceManagerSettings = new();
 
     public InMemorySettingsRepository()
     {
@@ -626,6 +627,87 @@ public class InMemorySettingsRepository : ISettingsRepository
             _userSettings = settings;
             return Task.FromResult(_userSettings);
         }
+    }
+
+    #endregion
+
+    #region Resource Manager Settings (Oshadi)
+
+    public Task<ResourceManagerSettings> GetSettingsAsync()
+    {
+        lock (_lock)
+        {
+            return Task.FromResult(CloneResourceManagerSettings(_resourceManagerSettings));
+        }
+    }
+
+    public Task<ResourceManagerSettings> UpdateSettingsAsync(ResourceManagerSettings settings)
+    {
+        lock (_lock)
+        {
+            settings.UpdatedAt = DateTime.UtcNow;
+            _resourceManagerSettings = CloneResourceManagerSettings(settings);
+            return Task.FromResult(CloneResourceManagerSettings(_resourceManagerSettings));
+        }
+    }
+
+    public Task<ResourceManagerSettings> ResetSettingsAsync()
+    {
+        lock (_lock)
+        {
+            _resourceManagerSettings = new ResourceManagerSettings
+            {
+                UpdatedAt = DateTime.UtcNow
+            };
+            return Task.FromResult(CloneResourceManagerSettings(_resourceManagerSettings));
+        }
+    }
+
+    private static ResourceManagerSettings CloneResourceManagerSettings(ResourceManagerSettings source)
+    {
+        return new ResourceManagerSettings
+        {
+            Profile = new ProfileSettings
+            {
+                FullName = source.Profile.FullName,
+                Email = source.Profile.Email,
+                Phone = source.Profile.Phone,
+                Warehouse = source.Profile.Warehouse
+            },
+            Inventory = new InventoryRulesSettings
+            {
+                LowStock = source.Inventory.LowStock,
+                CriticalStock = source.Inventory.CriticalStock,
+                ExpiryDays = source.Inventory.ExpiryDays,
+                AutoReorder = source.Inventory.AutoReorder,
+                TrackExpiry = source.Inventory.TrackExpiry,
+                AllowNegative = source.Inventory.AllowNegative
+            },
+            Dispatch = new DispatchPreferencesSettings
+            {
+                DefaultVehicle = source.Dispatch.DefaultVehicle,
+                Approval = source.Dispatch.Approval,
+                Proof = source.Dispatch.Proof,
+                Tracking = source.Dispatch.Tracking,
+                DelayAlert = source.Dispatch.DelayAlert
+            },
+            Notifications = new NotificationPreferencesSettings
+            {
+                Email = source.Notifications.Email,
+                System = source.Notifications.System,
+                Critical = source.Notifications.Critical,
+                LowStock = source.Notifications.LowStock,
+                Dispatch = source.Notifications.Dispatch,
+                Weekly = source.Notifications.Weekly
+            },
+            Security = new SecuritySettings
+            {
+                TwoFactor = source.Security.TwoFactor,
+                SessionTimeout = source.Security.SessionTimeout,
+                LoginAlerts = source.Security.LoginAlerts
+            },
+            UpdatedAt = source.UpdatedAt
+        };
     }
 
     #endregion

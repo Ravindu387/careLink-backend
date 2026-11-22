@@ -10,11 +10,11 @@ namespace CareLink.Application.Services;
 public class AccommodationRequestService : IAccommodationRequestService
 {
     private readonly IAccommodationRequestRepository _repository;
-    private readonly IShelterRepository _shelterRepository;
+    private readonly CareLink.Core.Interfaces.IShelterRepository _shelterRepository;
 
     public AccommodationRequestService(
         IAccommodationRequestRepository repository,
-        IShelterRepository shelterRepository)
+        CareLink.Core.Interfaces.IShelterRepository shelterRepository)
     {
         _repository = repository;
         _shelterRepository = shelterRepository;

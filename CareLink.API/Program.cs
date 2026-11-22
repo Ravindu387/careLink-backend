@@ -9,6 +9,7 @@ using CareLink.Core.Entities;
 using CareLink.Core.Interfaces;
 using CareLink.Infrastructure;
 using CareLink.Infrastructure.Data;
+using CareLink.Infrastructure.Repositories;
 using CareLink.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -120,11 +121,55 @@ builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IOrganizationService, OrganizationService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 
-// 5. Register Controllers & OpenAPI Documentation
+// 5. Register Resource Manager & Citizen Services (Oshadi)
+builder.Services.AddSingleton<IAlertRepository, InMemoryAlertRepository>();
+builder.Services.AddScoped<IAlertService, AlertService>();
+builder.Services.AddSingleton<IAllocationRepository, InMemoryAllocationRepository>();
+builder.Services.AddScoped<IAllocationService, AllocationService>();
+builder.Services.AddSingleton<IAuditLogRepository, InMemoryAuditLogRepository>();
+builder.Services.AddSingleton<IDispatchRepository, InMemoryDispatchRepository>();
+builder.Services.AddScoped<IDispatchService, DispatchService>();
+builder.Services.AddSingleton<IInventoryRepository, InMemoryInventoryRepository>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddSingleton<IProcurementRepository, InMemoryProcurementRepository>();
+builder.Services.AddScoped<IProcurementService, ProcurementService>();
+builder.Services.AddSingleton<IReportRepository, InMemoryReportRepository>();
+builder.Services.AddSingleton<IResourceDashboardRepository, InMemoryResourceDashboardRepository>();
+builder.Services.AddScoped<IResourceDashboardService, ResourceDashboardService>();
+builder.Services.AddSingleton<IResourceRequestRepository, InMemoryResourceRequestRepository>();
+builder.Services.AddScoped<IResourceRequestService, ResourceRequestService>();
+builder.Services.AddSingleton<CareLink.Application.Interfaces.ISettingsRepository, InMemorySettingsRepository>();
+builder.Services.AddSingleton<IStockTransferRepository, InMemoryStockTransferRepository>();
+builder.Services.AddScoped<IStockTransferService, StockTransferService>();
+builder.Services.AddSingleton<ISupplierRepository, InMemorySupplierRepository>();
+builder.Services.AddScoped<ISupplierService, SupplierService>();
+builder.Services.AddSingleton<IWarehouseRepository, InMemoryWarehouseRepository>();
+builder.Services.AddScoped<IWarehouseService, WarehouseService>();
+builder.Services.AddSingleton<IFeedbackRepository, InMemoryFeedbackRepository>();
+builder.Services.AddScoped<IFeedbackService, FeedbackService>();
+builder.Services.AddSingleton<ICitizenHomeRepository, InMemoryCitizenHomeRepository>();
+builder.Services.AddScoped<ICitizenHomeService, CitizenHomeService>();
+builder.Services.AddSingleton<IMessageRepository, InMemoryMessageRepository>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddSingleton<IDocumentRepository, InMemoryDocumentRepository>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddSingleton<IHouseholdRepository, InMemoryHouseholdRepository>();
+builder.Services.AddScoped<IHouseholdService, HouseholdService>();
+builder.Services.AddSingleton<ICitizenNotificationRepository, InMemoryCitizenNotificationRepository>();
+builder.Services.AddScoped<ICitizenNotificationService, CitizenNotificationService>();
+builder.Services.AddSingleton<ICitizenProfileRepository, InMemoryCitizenProfileRepository>();
+builder.Services.AddScoped<ICitizenProfileService, CitizenProfileService>();
+builder.Services.AddSingleton<ICitizenRequestRepository, InMemoryCitizenRequestRepository>();
+builder.Services.AddScoped<ICitizenRequestService, CitizenRequestService>();
+builder.Services.AddSingleton<ISafetyUpdateRepository, InMemorySafetyUpdateRepository>();
+builder.Services.AddScoped<ISafetyUpdateService, SafetyUpdateService>();
+builder.Services.AddSingleton<CareLink.Application.Interfaces.IShelterRepository, InMemoryShelterRepository>();
+
+// 6. Register Controllers & OpenAPI Documentation
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
-// 6. Configure CORS for React frontend (Vite port 5173 by default)
+// 7. Configure CORS for React frontend (Vite & standard dev ports)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("CareLinkFrontend", policy =>
@@ -146,7 +191,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// 7. Seed Database and Initial Records on Startup
+// 8. Seed Database and Initial Records on Startup
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -178,7 +223,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// 8. Configure HTTP Request Pipeline
+// 9. Configure HTTP Request Pipeline
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();

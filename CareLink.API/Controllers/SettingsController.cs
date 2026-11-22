@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using CareLink.Application.Common;
 using CareLink.Application.DTOs;
 using CareLink.Application.DTOs.Settings;
@@ -11,6 +12,7 @@ namespace CareLink.API.Controllers;
 
 [ApiController]
 [Route("api/settings")]
+[Route("api/[controller]")]
 [Route("api/emergency-settings")]
 public class SettingsController : ControllerBase
 {
@@ -50,8 +52,46 @@ public class SettingsController : ControllerBase
             return Ok(partnerSettings);
         }
 
+        if (string.Equals(type, "resourcemanager", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(type, "resource-manager", StringComparison.OrdinalIgnoreCase))
+        {
+            var rmSettings = await _settingsService.GetResourceManagerSettingsAsync();
+            return Ok(rmSettings);
+        }
+
         var systemSettings = await _settingsService.GetSettingsAsync();
         return Ok(systemSettings);
+    }
+
+    /// <summary>
+    /// Update settings (supports both Platform System Settings and Resource Manager settings).
+    /// </summary>
+    [HttpPut]
+    public async Task<IActionResult> UpdateSettings([FromBody] JsonElement raw)
+    {
+        var jsonText = raw.GetRawText();
+
+        if (raw.TryGetProperty("settings", out _))
+        {
+            var sysReq = JsonSerializer.Deserialize<UpdateSystemSettingsDto>(jsonText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (sysReq != null)
+            {
+                var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "System Administrator";
+                var result = await _settingsService.UpdateSettingsAsync(sysReq, actor);
+                if (!result.Success) return BadRequest(result);
+                return Ok(result);
+            }
+        }
+
+        var rmReq = JsonSerializer.Deserialize<UpdateSettingsRequest>(jsonText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        if (rmReq != null)
+        {
+            var result = await _settingsService.UpdateSettingsAsync(rmReq);
+            if (!result.Success) return BadRequest(result);
+            return Ok(result);
+        }
+
+        return BadRequest(new { error = "Invalid settings update payload." });
     }
 
     #endregion
@@ -62,7 +102,6 @@ public class SettingsController : ControllerBase
     /// Retrieve current platform system configuration, security thresholds, and retention policies.
     /// </summary>
     [HttpGet("system")]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin}")]
     [ProducesResponseType(typeof(ApiResponse<SystemSettingsDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSystemSettings()
     {
@@ -73,9 +112,7 @@ public class SettingsController : ControllerBase
     /// <summary>
     /// Update platform system configuration and policy parameters.
     /// </summary>
-    [HttpPut]
     [HttpPut("system")]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin}")]
     [ProducesResponseType(typeof(ApiResponse<SystemSettingsDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<SystemSettingsDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateSystemSettings([FromBody] UpdateSystemSettingsDto request)
@@ -90,12 +127,44 @@ public class SettingsController : ControllerBase
     /// Reset platform system settings to platform defaults.
     /// </summary>
     [HttpPost("system/reset")]
-    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin}")]
     [ProducesResponseType(typeof(ApiResponse<SystemSettingsDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ResetSystemDefaults()
     {
         var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "System Administrator";
         var result = await _settingsService.ResetDefaultsAsync(actor);
+        return Ok(result);
+    }
+
+    #endregion
+
+    #region Resource Manager Settings Endpoints (Oshadi)
+
+    [HttpPost("reset")]
+    public async Task<IActionResult> ResetSettings()
+    {
+        var result = await _settingsService.ResetSettingsAsync();
+        return Ok(result);
+    }
+
+    [HttpPut("inventory")]
+    public async Task<IActionResult> UpdateInventory([FromBody] InventoryRulesSettingsDto dto)
+    {
+        var result = await _settingsService.UpdateInventoryRulesAsync(dto);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    [HttpPut("dispatch")]
+    public async Task<IActionResult> UpdateDispatch([FromBody] DispatchPreferencesSettingsDto dto)
+    {
+        var result = await _settingsService.UpdateDispatchPreferencesAsync(dto);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
         return Ok(result);
     }
 
@@ -112,10 +181,29 @@ public class SettingsController : ControllerBase
     }
 
     [HttpPut("profile")]
-    public async Task<IActionResult> UpdateProfile([FromBody] ProfileDto dto)
+    public async Task<IActionResult> UpdateProfile([FromBody] JsonElement raw)
     {
-        var result = await _settingsService.UpdateProfileAsync(dto);
-        return Ok(result);
+        var jsonText = raw.GetRawText();
+
+        if (raw.TryGetProperty("warehouse", out _))
+        {
+            var rmProfile = JsonSerializer.Deserialize<ProfileSettingsDto>(jsonText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (rmProfile != null)
+            {
+                var rmResult = await _settingsService.UpdateProfileAsync(rmProfile);
+                if (!rmResult.Success) return BadRequest(rmResult);
+                return Ok(rmResult);
+            }
+        }
+
+        var dto = JsonSerializer.Deserialize<ProfileDto>(jsonText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        if (dto != null)
+        {
+            var result = await _settingsService.UpdateProfileAsync(dto);
+            return Ok(result);
+        }
+
+        return BadRequest(new { error = "Invalid profile payload." });
     }
 
     // ── Shelter Settings ─────────────────────────────────
@@ -144,7 +232,12 @@ public class SettingsController : ControllerBase
     [HttpPut("security")]
     public async Task<IActionResult> UpdateSecurity([FromBody] SecuritySettingsDto dto)
     {
+        var rmRes = await _settingsService.UpdateResourceManagerSecuritySettingsAsync(dto);
         await _settingsService.UpdateSecuritySettingsAsync(dto);
+        if (rmRes != null && rmRes.Success)
+        {
+            return Ok(rmRes);
+        }
         return Ok(new { message = "Security settings updated." });
     }
 
@@ -157,10 +250,29 @@ public class SettingsController : ControllerBase
     }
 
     [HttpPut("notifications")]
-    public async Task<IActionResult> UpdateNotifications([FromBody] NotificationSettingsDto dto)
+    public async Task<IActionResult> UpdateNotifications([FromBody] JsonElement raw)
     {
-        var result = await _settingsService.UpdateNotificationSettingsAsync(dto);
-        return Ok(result);
+        var jsonText = raw.GetRawText();
+
+        if (raw.TryGetProperty("weekly", out _) || raw.TryGetProperty("lowStock", out _))
+        {
+            var rmNotif = JsonSerializer.Deserialize<NotificationPreferencesSettingsDto>(jsonText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (rmNotif != null)
+            {
+                var rmResult = await _settingsService.UpdateNotificationPreferencesAsync(rmNotif);
+                if (!rmResult.Success) return BadRequest(rmResult);
+                return Ok(rmResult);
+            }
+        }
+
+        var dto = JsonSerializer.Deserialize<NotificationSettingsDto>(jsonText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        if (dto != null)
+        {
+            var result = await _settingsService.UpdateNotificationSettingsAsync(dto);
+            return Ok(result);
+        }
+
+        return BadRequest(new { error = "Invalid notification settings payload." });
     }
 
     #endregion
@@ -253,11 +365,6 @@ public class SettingsController : ControllerBase
         }
 
         var result = await _settingsService.ChangeCoordinatorPasswordAsync(dto, cancellationToken);
-        if (!result.Success)
-        {
-            return BadRequest(result);
-        }
-
         return Ok(result);
     }
 
@@ -294,7 +401,6 @@ public class SettingsController : ControllerBase
     /// <summary>
     /// Resets Coordinator settings to default baseline.
     /// </summary>
-    [HttpPost("reset")]
     [HttpPost("coordinator/reset")]
     [ProducesResponseType(typeof(CoordinatorSettingsDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<CoordinatorSettingsDto>> ResetCoordinatorSettings(CancellationToken cancellationToken)

@@ -9,11 +9,11 @@ namespace CareLink.Application.Services;
 public class RoomBedService : IRoomBedService
 {
     private readonly IRoomBedRepository _roomBedRepository;
-    private readonly IShelterRepository _shelterRepository;
+    private readonly CareLink.Core.Interfaces.IShelterRepository _shelterRepository;
 
     public RoomBedService(
         IRoomBedRepository roomBedRepository,
-        IShelterRepository shelterRepository)
+        CareLink.Core.Interfaces.IShelterRepository shelterRepository)
     {
         _roomBedRepository = roomBedRepository;
         _shelterRepository = shelterRepository;

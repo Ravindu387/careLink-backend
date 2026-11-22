@@ -47,6 +47,11 @@ public class SecuritySettings
 {
     public string PasswordHash { get; set; } = "Coordinator@123";
     public bool TwoFactorEnabled { get; set; } = true;
+    public bool TwoFactor
+    {
+        get => TwoFactorEnabled;
+        set => TwoFactorEnabled = value;
+    }
     public bool LoginAlerts { get; set; } = true;
     public string SessionTimeout { get; set; } = "30 minutes";
     public DateTimeOffset LastPasswordChangedAt { get; set; } = DateTimeOffset.UtcNow.AddDays(-14);

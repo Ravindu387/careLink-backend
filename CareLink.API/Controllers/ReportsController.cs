@@ -13,6 +13,7 @@ namespace CareLink.API.Controllers;
 
 [ApiController]
 [Route("api/reports")]
+[Route("api/[controller]")]
 public class ReportsController : ControllerBase
 {
     private readonly IReportService _reportService;
@@ -28,6 +29,124 @@ public class ReportsController : ControllerBase
         _reportsService = reportsService;
         _logger = logger;
     }
+
+    #region Resource Manager & Governance Reports (Oshadi)
+
+    /// <summary>
+    /// Retrieves all reports with optional filtering (Oshadi).
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetReports([FromQuery] ReportFilterParams filters)
+    {
+        var result = await _reportService.GetReportsAsync(filters);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Retrieves a single report by integer ID (Oshadi).
+    /// </summary>
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var result = await _reportService.GetReportByIdAsync(id);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Generates a new resource manager report.
+    /// </summary>
+    [HttpPost("generate")]
+    public async Task<IActionResult> Generate([FromBody] GenerateReportRequest request)
+    {
+        var result = await _reportService.GenerateReportAsync(request);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
+    }
+
+    /// <summary>
+    /// Deletes a report by integer ID.
+    /// </summary>
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var result = await _reportService.DeleteReportAsync(id);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Retrieves report schedules.
+    /// </summary>
+    [HttpGet("schedules")]
+    public async Task<IActionResult> GetSchedules()
+    {
+        var result = await _reportService.GetSchedulesAsync();
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Creates a report schedule.
+    /// </summary>
+    [HttpPost("schedule")]
+    public async Task<IActionResult> CreateSchedule([FromBody] CreateReportScheduleRequest request)
+    {
+        var result = await _reportService.CreateScheduleAsync(request);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Toggles active status of a report schedule.
+    /// </summary>
+    [HttpPatch("schedules/{id:int}/toggle")]
+    public async Task<IActionResult> ToggleSchedule(int id)
+    {
+        var result = await _reportService.ToggleScheduleStatusAsync(id);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Deletes a report schedule.
+    /// </summary>
+    [HttpDelete("schedules/{id:int}")]
+    public async Task<IActionResult> DeleteSchedule(int id)
+    {
+        var result = await _reportService.DeleteScheduleAsync(id);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Exports a single report file by ID.
+    /// </summary>
+    [HttpGet("{id:int}/export")]
+    public async Task<IActionResult> ExportSingle(int id, [FromQuery] string format = "csv")
+    {
+        var file = await _reportService.ExportReportFileAsync(id, format);
+        return File(file.Bytes, file.ContentType, file.FileName);
+    }
+
+    #endregion
 
     #region Administrative and Audit Reports (HEAD)
 
@@ -78,7 +197,6 @@ public class ReportsController : ControllerBase
         {
             return NotFound(result);
         }
-
         return Ok(result);
     }
 
@@ -100,16 +218,31 @@ public class ReportsController : ControllerBase
 
     #endregion
 
-    #region Operational and Shelter Reports (Prabhani)
+    #region Operational Analytics and Exports
 
     /// <summary>
-    /// Gets aggregated reports analytics, trends, and metrics according to applied filters.
+    /// Gets aggregated reports analytics and trends according to applied query parameters.
     /// </summary>
     [HttpGet("analytics")]
-    public async Task<ActionResult<ReportsAnalyticsDto>> GetAnalytics(
+    public async Task<IActionResult> GetAnalytics(
         [FromQuery] ReportsAnalyticsQueryParameters parameters,
+        [FromQuery] string? dateRange,
+        [FromQuery] string? metricType,
+        [FromQuery] string? comparisonPeriod,
         CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(dateRange) || !string.IsNullOrWhiteSpace(metricType))
+        {
+            var query = new AnalyticsQueryParams
+            {
+                DateRange = dateRange,
+                MetricType = metricType,
+                ComparisonPeriod = comparisonPeriod
+            };
+            var res = await _reportService.GetAnalyticsDashboardAsync(query);
+            return Ok(res);
+        }
+
         var analytics = await _reportsService.GetAnalyticsAsync(parameters, cancellationToken);
         return Ok(analytics);
     }
@@ -125,21 +258,27 @@ public class ReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Exports report data in CSV format based on the selected report title and filter parameters.
+    /// Exports reports in CSV format with title or filter parameters.
     /// </summary>
     [HttpGet("export")]
     public async Task<IActionResult> ExportCsv(
-        [FromQuery] string reportTitle,
+        [FromQuery] string? reportTitle,
         [FromQuery] ReportsAnalyticsQueryParameters parameters,
-        CancellationToken cancellationToken)
+        [FromQuery] ReportFilterParams? filters,
+        [FromQuery] string format = "csv",
+        CancellationToken cancellationToken = default)
     {
-        var title = string.IsNullOrWhiteSpace(reportTitle) ? "Operational Report" : reportTitle.Trim();
-        var csv = await _reportsService.ExportReportCsvAsync(title, parameters, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(reportTitle))
+        {
+            var title = reportTitle.Trim();
+            var csv = await _reportsService.ExportReportCsvAsync(title, parameters, cancellationToken);
+            var safeFileName = title.ToLower().Replace(" ", "-") + ".csv";
+            var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
+            return File(bytes, "text/csv; charset=utf-8", safeFileName);
+        }
 
-        var safeFileName = title.ToLower().Replace(" ", "-") + ".csv";
-        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
-
-        return File(bytes, "text/csv; charset=utf-8", safeFileName);
+        var file = await _reportService.ExportReportFileAsync(null, format, filters);
+        return File(file.Bytes, file.ContentType, file.FileName);
     }
 
     #endregion
