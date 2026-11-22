@@ -36,8 +36,8 @@ public interface ISettingsService
     Task<ProfileDto> UpdateProfileAsync(ProfileDto dto);
     Task<ShelterSettingsDto> GetShelterSettingsAsync();
     Task<ShelterSettingsDto> UpdateShelterSettingsAsync(ShelterSettingsDto dto);
-    Task<SecuritySettingsDto> GetSecuritySettingsAsync();
-    Task<bool> UpdateSecuritySettingsAsync(SecuritySettingsDto dto);
+    Task<CareLink.Application.DTOs.Settings.SecuritySettingsDto> GetSecuritySettingsAsync();
+    Task<bool> UpdateSecuritySettingsAsync(CareLink.Application.DTOs.Settings.SecuritySettingsDto dto);
     Task<NotificationSettingsDto> GetNotificationSettingsAsync();
     Task<NotificationSettingsDto> UpdateNotificationSettingsAsync(NotificationSettingsDto dto);
 
@@ -49,5 +49,5 @@ public interface ISettingsService
     Task<ApiResponse<InventoryRulesSettingsDto>> UpdateInventoryRulesAsync(InventoryRulesSettingsDto dto);
     Task<ApiResponse<DispatchPreferencesSettingsDto>> UpdateDispatchPreferencesAsync(DispatchPreferencesSettingsDto dto);
     Task<ApiResponse<NotificationPreferencesSettingsDto>> UpdateNotificationPreferencesAsync(NotificationPreferencesSettingsDto dto);
-    Task<ApiResponse<SecuritySettingsDto>> UpdateResourceManagerSecuritySettingsAsync(SecuritySettingsDto dto);
+    Task<ApiResponse<CareLink.Application.DTOs.SecuritySettingsDto>> UpdateResourceManagerSecuritySettingsAsync(CareLink.Application.DTOs.SecuritySettingsDto dto);
 }

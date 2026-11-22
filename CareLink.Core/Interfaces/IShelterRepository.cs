@@ -47,4 +47,21 @@ public interface IShelterRepository
 
     Task<(int Registered, int Operational, int NearCapacity, int Maintenance)> GetSummaryMetricsAsync(
         CancellationToken cancellationToken = default);
+
+    // Citizen Portal & Extended Shelter Management
+    Task<IEnumerable<Shelter>> GetSheltersAsync(
+        string? search = null,
+        string? area = null,
+        double? maxDistance = null,
+        string? availability = null,
+        bool? accessibleOnly = null,
+        string? service = null);
+
+    Task<Shelter> CreateAsync(Shelter shelter);
+
+    Task<Shelter?> UpdateAsync(string id, Shelter shelter);
+
+    Task<ShelterBooking> CreateBookingAsync(ShelterBooking booking);
+
+    Task<IEnumerable<ShelterBooking>> GetBookingsAsync(string? citizenName = null);
 }

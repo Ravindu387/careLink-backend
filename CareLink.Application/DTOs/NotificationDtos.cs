@@ -108,14 +108,7 @@ public class CreateNotificationRequest
     public string Type { get; set; } = "alert";
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
-    public string Message
-    {
-        get => Description;
-        set => Description = value;
-    }
     public string Category { get; set; } = "Safety alerts";
-    public string Severity { get; set; } = "Warning";
     public string? ActionUrl { get; set; }
-    public string? ActionLabel { get; set; }
     public string? CitizenName { get; set; }
 }
