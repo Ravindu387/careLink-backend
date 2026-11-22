@@ -1,4 +1,5 @@
 using CareLink.Application.Common;
+using CareLink.Application.DTOs.Roles;
 using CareLink.Application.DTOs.Users;
 using CareLink.Application.Interfaces;
 using CareLink.Core.Constants;
@@ -12,22 +13,27 @@ public class UserService : IUserService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
+    private readonly IPermissionService _permissionService;
 
     private static readonly HashSet<string> PrivilegedRoleNames = new(StringComparer.OrdinalIgnoreCase)
     {
+        UserRoles.Admin,
         UserRoles.SystemAdmin,
         UserRoles.EmergencyCoordinator,
         UserRoles.IncidentManager,
         UserRoles.LogisticsManager,
-        UserRoles.ShelterAdmin
+        UserRoles.ShelterAdmin,
+        UserRoles.PartnerOfficer
     };
 
     public UserService(
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole> roleManager)
+        RoleManager<IdentityRole> roleManager,
+        IPermissionService permissionService)
     {
         _userManager = userManager;
         _roleManager = roleManager;
+        _permissionService = permissionService;
     }
 
     public async Task<ApiResponse<PaginatedListDto<UserDetailsDto>>> GetUsersAsync(UserListQueryDto query)
@@ -149,7 +155,8 @@ public class UserService : IUserService
         }
 
         var roles = await _userManager.GetRolesAsync(user);
-        var dto = MapToUserDetailsDto(user, roles);
+        var permissions = (await _permissionService.GetUserEffectivePermissionsAsync(user.Id)).ToList();
+        var dto = MapToUserDetailsDto(user, roles, permissions);
 
         return ApiResponse<UserDetailsDto>.SuccessResult(dto);
     }
@@ -227,13 +234,9 @@ public class UserService : IUserService
 
         await _userManager.AddToRoleAsync(user, assignedRole);
 
-        // Fetch user with organization navigation
-        var createdUser = await _userManager.Users
-            .Include(u => u.Organization)
-            .FirstOrDefaultAsync(u => u.Id == user.Id) ?? user;
-
-        var roles = await _userManager.GetRolesAsync(createdUser);
-        var dto = MapToUserDetailsDto(createdUser, roles);
+        var roles = await _userManager.GetRolesAsync(user);
+        var permissions = (await _permissionService.GetUserEffectivePermissionsAsync(user.Id)).ToList();
+        var dto = MapToUserDetailsDto(user, roles, permissions);
 
         return ApiResponse<UserDetailsDto>.SuccessResult(dto, "User created successfully.");
     }
@@ -254,50 +257,40 @@ public class UserService : IUserService
         user.NIC = request.NIC?.Trim();
         user.Address = request.Address?.Trim();
         user.OrganizationId = request.OrganizationId;
-        user.UpdatedAt = DateTime.UtcNow;
-
         if (request.IsActive.HasValue)
         {
             user.IsActive = request.IsActive.Value;
         }
+        user.UpdatedAt = DateTime.UtcNow;
 
         var updateResult = await _userManager.UpdateAsync(user);
         if (!updateResult.Succeeded)
         {
             var errors = updateResult.Errors.Select(e => e.Description).ToList();
-            return ApiResponse<UserDetailsDto>.FailureResult("Failed to update user profile.", errors);
+            return ApiResponse<UserDetailsDto>.FailureResult("Failed to update user.", errors);
         }
 
-        // Update role if specified
         if (!string.IsNullOrWhiteSpace(request.Role))
         {
             var newRole = NormalizeRoleName(request.Role);
             if (UserRoles.IsValidRole(newRole))
             {
                 var currentRoles = await _userManager.GetRolesAsync(user);
-                if (!currentRoles.Contains(newRole, StringComparer.OrdinalIgnoreCase))
+                if (!currentRoles.Contains(newRole))
                 {
-                    if (currentRoles.Any())
-                    {
-                        await _userManager.RemoveFromRolesAsync(user, currentRoles);
-                    }
-
+                    await _userManager.RemoveFromRolesAsync(user, currentRoles);
                     if (!await _roleManager.RoleExistsAsync(newRole))
                     {
                         await _roleManager.CreateAsync(new IdentityRole(newRole));
                     }
-
                     await _userManager.AddToRoleAsync(user, newRole);
                 }
             }
         }
 
-        var updatedUser = await _userManager.Users
-            .Include(u => u.Organization)
-            .FirstOrDefaultAsync(u => u.Id == id) ?? user;
-
-        var updatedRoles = await _userManager.GetRolesAsync(updatedUser);
-        var dto = MapToUserDetailsDto(updatedUser, updatedRoles);
+        var roles = await _userManager.GetRolesAsync(user);
+        var permissions = (await _permissionService.GetUserEffectivePermissionsAsync(user.Id)).ToList();
+        var dto = MapToUserDetailsDto(user, roles, permissions);
 
         return ApiResponse<UserDetailsDto>.SuccessResult(dto, "User updated successfully.");
     }
@@ -316,11 +309,11 @@ public class UserService : IUserService
         var result = await _userManager.UpdateAsync(user);
         if (!result.Succeeded)
         {
-            var errors = result.Errors.Select(e => e.Description).ToList();
-            return ApiResponse<bool>.FailureResult("Failed to update user status.", errors);
+            return ApiResponse<bool>.FailureResult("Failed to update user status.");
         }
 
-        return ApiResponse<bool>.SuccessResult(true, $"User status updated to {(isActive ? "Active" : "Disabled")}.");
+        var statusText = isActive ? "activated" : "deactivated";
+        return ApiResponse<bool>.SuccessResult(true, $"User account {statusText} successfully.");
     }
 
     public async Task<ApiResponse<bool>> DeleteUserAsync(string id)
@@ -331,23 +324,110 @@ public class UserService : IUserService
             return ApiResponse<bool>.FailureResult("User not found.");
         }
 
-        // Protect root system admin from accidental deletion
-        if (user.Email?.Equals("admin@carelink.org", StringComparison.OrdinalIgnoreCase) == true)
+        var roles = await _userManager.GetRolesAsync(user);
+        if (roles.Contains(UserRoles.SystemAdmin))
         {
-            return ApiResponse<bool>.FailureResult("The default system administrator account cannot be deleted.");
+            var systemAdmins = await _userManager.GetUsersInRoleAsync(UserRoles.SystemAdmin);
+            if (systemAdmins.Count <= 1)
+            {
+                return ApiResponse<bool>.FailureResult("Cannot delete the last System Administrator account.");
+            }
         }
 
         var result = await _userManager.DeleteAsync(user);
         if (!result.Succeeded)
         {
-            var errors = result.Errors.Select(e => e.Description).ToList();
-            return ApiResponse<bool>.FailureResult("Failed to delete user.", errors);
+            return ApiResponse<bool>.FailureResult("Failed to delete user.");
         }
 
+        _permissionService.InvalidateCache(userId: user.Id);
         return ApiResponse<bool>.SuccessResult(true, "User deleted successfully.");
     }
 
-    private static UserDetailsDto MapToUserDetailsDto(ApplicationUser user, IList<string> roles)
+    public async Task<ApiResponse<bool>> UpdateUserRolesAsync(string userId, UpdateUserRolesRequestDto request)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return ApiResponse<bool>.FailureResult("User not found.");
+        }
+
+        var currentRoles = await _userManager.GetRolesAsync(user);
+
+        // Normalize and validate requested roles
+        var validRoles = request.Roles
+            .Select(NormalizeRoleName)
+            .Where(UserRoles.IsValidRole)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (validRoles.Count == 0)
+        {
+            validRoles.Add(UserRoles.Citizen);
+        }
+
+        // Safeguard: Check if removing Admin/SystemAdmin leaves 0 active administrators
+        var isCurrentlyAdmin = currentRoles.Any(UserRoles.IsAdminRole);
+        var willBeAdmin = validRoles.Any(UserRoles.IsAdminRole);
+
+        if (isCurrentlyAdmin && !willBeAdmin)
+        {
+            var adminUsers = (await _userManager.GetUsersInRoleAsync(UserRoles.Admin)).ToList();
+            var systemAdminUsers = (await _userManager.GetUsersInRoleAsync(UserRoles.SystemAdmin)).ToList();
+            var remainingAdmins = adminUsers.Concat(systemAdminUsers)
+                .Where(u => u.IsActive && u.Id != user.Id)
+                .Select(u => u.Id)
+                .Distinct()
+                .Count();
+
+            if (remainingAdmins == 0)
+            {
+                return ApiResponse<bool>.FailureResult("Cannot remove the last active administrator from the system.");
+            }
+        }
+
+        // Ensure roles exist in database
+        foreach (var role in validRoles)
+        {
+            if (!await _roleManager.RoleExistsAsync(role))
+            {
+                await _roleManager.CreateAsync(new IdentityRole(role));
+            }
+        }
+
+        var removeResult = await _userManager.RemoveFromRolesAsync(user, currentRoles);
+        if (!removeResult.Succeeded)
+        {
+            return ApiResponse<bool>.FailureResult("Failed to clear current user roles.");
+        }
+
+        var addResult = await _userManager.AddToRolesAsync(user, validRoles);
+        if (!addResult.Succeeded)
+        {
+            return ApiResponse<bool>.FailureResult("Failed to assign new user roles.");
+        }
+
+        user.UpdatedAt = DateTime.UtcNow;
+        await _userManager.UpdateAsync(user);
+
+        _permissionService.InvalidateCache(userId: user.Id);
+
+        return ApiResponse<bool>.SuccessResult(true, $"Assigned roles for user '{user.FullName}' updated to: {string.Join(", ", validRoles)}.");
+    }
+
+    public async Task<ApiResponse<IReadOnlyList<string>>> GetUserPermissionsAsync(string userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return ApiResponse<IReadOnlyList<string>>.FailureResult("User not found.");
+        }
+
+        var permissions = await _permissionService.GetUserEffectivePermissionsAsync(userId);
+        return ApiResponse<IReadOnlyList<string>>.SuccessResult(permissions, "Effective user permissions retrieved successfully.");
+    }
+
+    private static UserDetailsDto MapToUserDetailsDto(ApplicationUser user, IList<string> roles, IList<string>? permissions = null)
     {
         return new UserDetailsDto
         {
@@ -358,6 +438,7 @@ public class UserService : IUserService
             NIC = user.NIC,
             Address = user.Address,
             Roles = roles,
+            Permissions = permissions ?? new List<string>(),
             OrganizationId = user.OrganizationId,
             OrganizationName = user.Organization?.Name,
             IsActive = user.IsActive,
@@ -387,6 +468,7 @@ public class UserService : IUserService
 
         return trimmed.ToLowerInvariant() switch
         {
+            "admin" or "administrator" => UserRoles.Admin,
             "emergency coordinator" or "emergencycoordinator" => UserRoles.EmergencyCoordinator,
             "incident manager" or "incidentmanager" => UserRoles.IncidentManager,
             "logistics manager" or "logisticsmanager" or "resource manager" or "resourcemanager" => UserRoles.LogisticsManager,
@@ -395,7 +477,7 @@ public class UserService : IUserService
             "donor" => UserRoles.Donor,
             "partner officer" or "partner organisation officer" or "partner organization officer" or "partnerofficer" => UserRoles.PartnerOfficer,
             "system admin" or "systemadmin" or "system administrator" or "systemadministrator" => UserRoles.SystemAdmin,
-            "volunteer" => UserRoles.VolunteerCoordinator,
+            "volunteer" => UserRoles.Volunteer,
             "citizen" => UserRoles.Citizen,
             _ => UserRoles.IsValidRole(trimmed) ? trimmed : UserRoles.Citizen
         };

@@ -9,6 +9,7 @@ public class UserDto
     public string? NIC { get; set; }
     public string? Address { get; set; }
     public IList<string> Roles { get; set; } = new List<string>();
+    public IList<string> Permissions { get; set; } = new List<string>();
     public Guid? OrganizationId { get; set; }
     public string? OrganizationName { get; set; }
     public bool IsActive { get; set; }
