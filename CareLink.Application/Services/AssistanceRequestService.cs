@@ -1,4 +1,4 @@
-﻿using CareLink.Application.Common;
+using CareLink.Application.Common;
 using CareLink.Application.DTOs;
 using CareLink.Application.DTOs.AuditLogs;
 using CareLink.Application.DTOs.Users;
