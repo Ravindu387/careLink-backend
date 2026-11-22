@@ -6,6 +6,7 @@ using CareLink.Core.Constants;
 using CareLink.Core.Entities;
 using CareLink.Core.Interfaces;
 using CareLink.Infrastructure.Data;
+using CareLink.Infrastructure.Repositories;
 using CareLink.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -96,8 +97,12 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 // 4. Register Application & Infrastructure Services (Dependency Injection)
+builder.Services.AddHttpClient();
 builder.Services.Configure<CareLink.Application.Common.EmailSettings>(
     builder.Configuration.GetSection(CareLink.Application.Common.EmailSettings.SectionName));
+builder.Services.Configure<CareLink.Application.Common.GeminiOptions>(
+    builder.Configuration.GetSection(CareLink.Application.Common.GeminiOptions.SectionName));
+builder.Services.AddSingleton<IGeminiService, GeminiService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
@@ -106,7 +111,8 @@ builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IIntegrationHealthService, IntegrationHealthService>();
-builder.Services.AddSingleton<IAiRecommendationService, AiRecommendationService>();
+builder.Services.AddScoped<IAiRecommendationRepository, AiRecommendationRepository>();
+builder.Services.AddScoped<IAiRecommendationService, AiRecommendationService>();
 builder.Services.AddSingleton<ISecurityEventService, SecurityEventService>();
 builder.Services.AddSingleton<IAuditLogService, AuditLogService>();
 builder.Services.AddSingleton<IVerificationService, VerificationService>();
