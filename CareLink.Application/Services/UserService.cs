@@ -316,6 +316,31 @@ public class UserService : IUserService
             return ApiResponse<bool>.FailureResult("User not found.");
         }
 
+        if (!isActive)
+        {
+            // Protect root system admin from accidental deactivation
+            if (user.Email?.Equals("admin@carelink.org", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return ApiResponse<bool>.FailureResult("The default system administrator account cannot be disabled.");
+            }
+
+            // Safeguard: Do not disable the last active administrator
+            var currentRoles = await _userManager.GetRolesAsync(user);
+            if (currentRoles.Any(UserRoles.IsAdminRole))
+            {
+                var adminUsers = (await _userManager.GetUsersInRoleAsync(UserRoles.Admin)).ToList();
+                var systemAdminUsers = (await _userManager.GetUsersInRoleAsync(UserRoles.SystemAdmin)).ToList();
+                var remainingActiveAdmins = adminUsers.Concat(systemAdminUsers)
+                    .DistinctBy(u => u.Id)
+                    .Count(u => u.Id != id && u.IsActive);
+
+                if (remainingActiveAdmins == 0)
+                {
+                    return ApiResponse<bool>.FailureResult("Cannot disable the last active administrator.");
+                }
+            }
+        }
+
         user.IsActive = isActive;
         user.UpdatedAt = DateTime.UtcNow;
 
