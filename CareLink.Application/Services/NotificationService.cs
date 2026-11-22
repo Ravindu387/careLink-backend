@@ -1,432 +1,489 @@
 using System.Collections.Concurrent;
 using CareLink.Application.Common;
+using CareLink.Application.DTOs;
 using CareLink.Application.DTOs.AuditLogs;
-using CareLink.Application.DTOs.Notifications;
 using CareLink.Application.DTOs.Users;
 using CareLink.Application.Interfaces;
 using CareLink.Core.Entities;
+using CareLink.Core.Interfaces;
+using Microsoft.Extensions.Logging;
+using AdminDtos = CareLink.Application.DTOs.Notifications;
 
 namespace CareLink.Application.Services;
 
 public class NotificationService : INotificationService
 {
-    private readonly ConcurrentDictionary<int, SystemNotification> _notifications = new();
-    private readonly ConcurrentDictionary<string, NotificationPreferencesDto> _preferences = new(StringComparer.OrdinalIgnoreCase);
+    private readonly INotificationRepository _repository;
     private readonly IAuditLogService _auditLogService;
-    private int _idSequence = 20;
+    private readonly ILogger<NotificationService> _logger;
+    private readonly ConcurrentDictionary<string, AdminDtos.NotificationPreferencesDto> _adminPreferences = new(StringComparer.OrdinalIgnoreCase);
 
-    public NotificationService(IAuditLogService auditLogService)
+    public NotificationService(
+        INotificationRepository repository,
+        IAuditLogService auditLogService,
+        ILogger<NotificationService> logger)
     {
+        _repository = repository;
         _auditLogService = auditLogService;
-        InitializeDefaultNotifications();
+        _logger = logger;
     }
 
-    private void InitializeDefaultNotifications()
-    {
-        var now = DateTime.UtcNow;
+    #region Operational & Coordinator Methods (Safna)
 
-        var seeds = new List<SystemNotification>
+    public async Task<PagedNotificationsDto> GetPagedAsync(
+        NotificationQueryParameters query,
+        CancellationToken cancellationToken = default)
+    {
+        var filter = new NotificationFilterParams
         {
-            new()
-            {
-                Id = 1,
-                Type = "Emergency",
-                Title = "Flood warning escalated – Greater Riverton",
-                Message = "Water levels have risen above the warning threshold. Review the affected locations and coordinate the emergency response team.",
-                Priority = "Critical",
-                Location = "Greater Riverton · North Ward",
-                Action = "View incident",
-                ActionUrl = "/admin/dashboard",
-                Unread = true,
-                CreatedAt = now.AddMinutes(-2)
-            },
-            new()
-            {
-                Id = 2,
-                Type = "Assistance",
-                Title = "New urgent assistance request",
-                Message = "A family of five has requested temporary shelter and drinking water. The request is awaiting assignment.",
-                Priority = "High",
-                Location = "Central Clinic area",
-                Action = "Review request",
-                ActionUrl = "/admin/requests",
-                Unread = true,
-                CreatedAt = now.AddMinutes(-14)
-            },
-            new()
-            {
-                Id = 3,
-                Type = "Volunteer",
-                Title = "Volunteer team check-in received",
-                Message = "Team Delta has checked in successfully. All 8 volunteers have been marked as available for the afternoon shift.",
-                Priority = "Normal",
-                Location = "Riverton Community Centre",
-                Action = "View team",
-                ActionUrl = "/admin/users",
-                Unread = true,
-                CreatedAt = now.AddMinutes(-32)
-            },
-            new()
-            {
-                Id = 4,
-                Type = "Resource",
-                Title = "Low stock alert: drinking water",
-                Message = "The Central Warehouse has less than 20% of its target drinking-water stock remaining. Replenishment is recommended.",
-                Priority = "High",
-                Location = "Central Warehouse",
-                Action = "View inventory",
-                ActionUrl = "/admin/dashboard",
-                Unread = true,
-                CreatedAt = now.AddHours(-1)
-            },
-            new()
-            {
-                Id = 5,
-                Type = "Emergency",
-                Title = "Shelter capacity nearing limit",
-                Message = "Riverton Primary School Shelter has reached 92% occupancy. Consider redirecting new arrivals to nearby shelters.",
-                Priority = "High",
-                Location = "Riverton Primary School",
-                Action = "View shelter",
-                ActionUrl = "/admin/dashboard",
-                Unread = false,
-                CreatedAt = now.AddHours(-2)
-            },
-            new()
-            {
-                Id = 6,
-                Type = "System",
-                Title = "Daily operational summary is ready",
-                Message = "Your daily response summary includes 48 resolved requests, 12 active incidents and 6 pending verifications.",
-                Priority = "Normal",
-                Action = "View summary",
-                ActionUrl = "/admin/reports",
-                Unread = false,
-                CreatedAt = now.Date.AddHours(8)
-            },
-            new()
-            {
-                Id = 7,
-                Type = "Assistance",
-                Title = "Assistance request successfully assigned",
-                Message = "Request REQ-2048 has been assigned to Case Manager N. Perera.",
-                Priority = "Normal",
-                Location = "East Riverton",
-                Action = "View request",
-                ActionUrl = "/admin/requests",
-                Unread = false,
-                CreatedAt = now.AddDays(-1).AddHours(3)
-            },
-            new()
-            {
-                Id = 8,
-                Type = "Volunteer",
-                Title = "Volunteer verification completed",
-                Message = "Three volunteer profiles have passed identity verification and are ready for deployment.",
-                Priority = "Normal",
-                Action = "View verification",
-                ActionUrl = "/admin/verification",
-                Unread = false,
-                CreatedAt = now.AddDays(-1).AddHours(1)
-            },
-            new()
-            {
-                Id = 9,
-                Type = "System",
-                Title = "Security event: 5 repeated failed sign-ins detected",
-                Message = "Suspicious login attempts detected from IP 185.42.18.9 targeting USR-10312. Automated rate limiting initiated.",
-                Priority = "High",
-                Location = "Security Gateway",
-                Action = "View security events",
-                ActionUrl = "/admin/security-events",
-                Unread = true,
-                CreatedAt = now.AddMinutes(-50)
-            },
-            new()
-            {
-                Id = 10,
-                Type = "Resource",
-                Title = "Emergency medical supply shipment arriving",
-                Message = "Shipment MED-882 from National Red Cross has arrived at Central Depot and cleared intake inspection.",
-                Priority = "Normal",
-                Location = "Central Depot Kalutara",
-                Action = "View inventory",
-                ActionUrl = "/admin/dashboard",
-                Unread = false,
-                CreatedAt = now.AddDays(-2)
-            }
+            Search = query.Search,
+            Category = query.Category,
+            UnreadOnly = query.UnreadOnly,
+            UrgentOnly = query.UrgentOnly,
+            Role = query.Role,
+            Page = Math.Max(1, query.Page),
+            PageSize = Math.Clamp(query.PageSize, 1, 100)
         };
 
-        foreach (var seed in seeds)
+        var items = await _repository.GetAllAsync(filter, cancellationToken);
+        var totalCount = await _repository.GetCountAsync(filter, cancellationToken);
+        var metrics = await _repository.GetMetricsAsync(query.Role, cancellationToken);
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize);
+        if (totalPages < 1) totalPages = 1;
+
+        return new PagedNotificationsDto
         {
-            _notifications.TryAdd(seed.Id, seed);
-        }
-    }
-
-    public Task<ApiResponse<PaginatedListDto<NotificationDto>>> GetNotificationsAsync(NotificationQueryDto query)
-    {
-        var items = _notifications.Values
-            .Where(n => !n.IsArchived)
-            .AsEnumerable();
-
-        // 1. Text Search
-        if (!string.IsNullOrWhiteSpace(query.Search))
-        {
-            var s = query.Search.Trim().ToLowerInvariant();
-            items = items.Where(n =>
-                n.Title.ToLowerInvariant().Contains(s) ||
-                n.Message.ToLowerInvariant().Contains(s) ||
-                (n.Location != null && n.Location.ToLowerInvariant().Contains(s)));
-        }
-
-        // 2. Type Filter
-        if (!string.IsNullOrWhiteSpace(query.Type) && !query.Type.Equals("All", StringComparison.OrdinalIgnoreCase))
-        {
-            if (query.Type.Equals("Unread", StringComparison.OrdinalIgnoreCase))
-            {
-                items = items.Where(n => n.Unread);
-            }
-            else
-            {
-                items = items.Where(n => n.Type.Equals(query.Type, StringComparison.OrdinalIgnoreCase));
-            }
-        }
-
-        // 3. UnreadOnly flag
-        if (query.UnreadOnly.HasValue && query.UnreadOnly.Value)
-        {
-            items = items.Where(n => n.Unread);
-        }
-
-        // 4. Priority Filter
-        if (!string.IsNullOrWhiteSpace(query.Priority) && !query.Priority.Equals("All priorities", StringComparison.OrdinalIgnoreCase))
-        {
-            items = items.Where(n => n.Priority.Equals(query.Priority, StringComparison.OrdinalIgnoreCase));
-        }
-
-        var ordered = items.OrderByDescending(n => n.CreatedAt).ToList();
-        var totalCount = ordered.Count;
-        var pageSize = Math.Max(1, Math.Min(100, query.PageSize));
-        var pageNumber = Math.Max(1, query.PageNumber);
-        var pagedList = ordered
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .Select(MapToDto)
-            .ToList();
-
-        var result = new PaginatedListDto<NotificationDto>
-        {
-            Items = pagedList,
+            Items = items.Select(MapToSafnaDto).ToList(),
             TotalCount = totalCount,
-            PageNumber = pageNumber,
-            PageSize = pageSize
+            Page = filter.Page,
+            PageSize = filter.PageSize,
+            TotalPages = totalPages,
+            UnreadCount = metrics.Unread
         };
-        return Task.FromResult(ApiResponse<PaginatedListDto<NotificationDto>>.SuccessResult(result));
     }
 
-    public Task<ApiResponse<NotificationStatsDto>> GetStatsAsync()
+    public async Task<IReadOnlyList<NotificationDto>> GetAllAsync(
+        NotificationQueryParameters query,
+        CancellationToken cancellationToken = default)
     {
-        var active = _notifications.Values.Where(n => !n.IsArchived).ToList();
-
-        var stats = new NotificationStatsDto
+        var filter = new NotificationFilterParams
         {
-            Total = active.Count,
-            UnreadCount = active.Count(n => n.Unread),
-            CriticalCount = active.Count(n => n.Priority.Equals("Critical", StringComparison.OrdinalIgnoreCase)),
-            HighPriorityCount = active.Count(n => n.Priority.Equals("High", StringComparison.OrdinalIgnoreCase)),
-            EmergencyCount = active.Count(n => n.Type.Equals("Emergency", StringComparison.OrdinalIgnoreCase)),
-            AssistanceCount = active.Count(n => n.Type.Equals("Assistance", StringComparison.OrdinalIgnoreCase)),
-            VolunteerCount = active.Count(n => n.Type.Equals("Volunteer", StringComparison.OrdinalIgnoreCase)),
-            ResourceCount = active.Count(n => n.Type.Equals("Resource", StringComparison.OrdinalIgnoreCase)),
-            SystemCount = active.Count(n => n.Type.Equals("System", StringComparison.OrdinalIgnoreCase))
+            Search = query.Search,
+            Category = query.Category,
+            UnreadOnly = query.UnreadOnly,
+            UrgentOnly = query.UrgentOnly,
+            Role = query.Role,
+            Page = 1,
+            PageSize = 500
         };
 
-        return Task.FromResult(ApiResponse<NotificationStatsDto>.SuccessResult(stats));
+        var items = await _repository.GetAllAsync(filter, cancellationToken);
+        return items.Select(MapToSafnaDto).ToList();
     }
 
-    public Task<ApiResponse<NotificationDto>> GetNotificationByIdAsync(int id)
+    public async Task<NotificationDto?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {
-        if (_notifications.TryGetValue(id, out var entity) && !entity.IsArchived)
-        {
-            return Task.FromResult(ApiResponse<NotificationDto>.SuccessResult(MapToDto(entity)));
-        }
-
-        return Task.FromResult(ApiResponse<NotificationDto>.FailureResult("Notification not found."));
+        var item = await _repository.GetByIdAsync(id, cancellationToken);
+        return item == null ? null : MapToSafnaDto(item);
     }
 
-    public async Task<ApiResponse<NotificationDto>> CreateNotificationAsync(CreateNotificationRequestDto request, string actor)
+    public async Task<NotificationDto> CreateAsync(CreateNotificationDto dto, CancellationToken cancellationToken = default)
     {
-        var id = Interlocked.Increment(ref _idSequence);
-        var entity = new SystemNotification
+        var id = Guid.NewGuid().ToString("N")[..8];
+        var isUrgent = dto.Urgent ?? (
+            dto.Category.Equals("urgent", StringComparison.OrdinalIgnoreCase) ||
+            dto.Category.Equals("critical", StringComparison.OrdinalIgnoreCase)
+        );
+
+        var item = new NotificationItem
         {
             Id = id,
-            Type = request.Type,
-            Title = request.Title,
-            Message = request.Message,
-            Priority = request.Priority,
-            Location = request.Location,
-            Action = request.Action,
-            ActionUrl = request.ActionUrl,
-            TargetUserRole = request.TargetUserRole,
+            Title = dto.Title.Trim(),
+            Description = dto.Description.Trim(),
+            Category = dto.Category.Trim(),
             Unread = true,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = actor
+            Urgent = isUrgent,
+            Reference = string.IsNullOrWhiteSpace(dto.Reference) ? $"NOTIF-{id[..4].ToUpperInvariant()}" : dto.Reference.Trim(),
+            Details = string.IsNullOrWhiteSpace(dto.Details) ? dto.Description.Trim() : dto.Details.Trim(),
+            ActionUrl = dto.ActionUrl,
+            ActionLabel = dto.ActionLabel,
+            TargetRole = string.IsNullOrWhiteSpace(dto.TargetRole) ? "all" : dto.TargetRole.Trim().ToLowerInvariant(),
+            CreatedAt = DateTimeOffset.UtcNow,
+            Time = "Just now"
         };
 
-        _notifications.TryAdd(id, entity);
+        var created = await _repository.AddAsync(item, cancellationToken);
+        return MapToSafnaDto(created);
+    }
 
-        // Record audit trail if critical alert
-        if (request.Priority.Equals("Critical", StringComparison.OrdinalIgnoreCase))
+    public async Task<bool> MarkReadAsync(string id, CancellationToken cancellationToken = default)
+    {
+        return await _repository.MarkReadAsync(id, cancellationToken);
+    }
+
+    public async Task<int> MarkAllReadAsync(string? role = null, CancellationToken cancellationToken = default)
+    {
+        return await _repository.MarkAllReadAsync(role, cancellationToken);
+    }
+
+    public async Task<bool> DeleteAsync(string id, CancellationToken cancellationToken = default)
+    {
+        return await _repository.DeleteAsync(id, cancellationToken);
+    }
+
+    public async Task<CareLink.Application.DTOs.NotificationPreferencesDto> GetPreferencesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var p = await _repository.GetPreferencesAsync(cancellationToken);
+        return new CareLink.Application.DTOs.NotificationPreferencesDto
         {
-            try
+            Critical = p.Critical,
+            Ai = p.Ai,
+            Resources = p.Resources,
+            Shelter = p.Shelter,
+            Partner = p.Partner,
+            Reports = p.Reports,
+            Urgent = p.Urgent,
+            Referrals = p.Referrals,
+            Collaboration = p.Collaboration,
+            Reporting = p.Reporting,
+            Team = p.Team,
+            Email = p.Email,
+            Push = p.Push,
+            UpdatedAt = p.UpdatedAt
+        };
+    }
+
+    public async Task<CareLink.Application.DTOs.NotificationPreferencesDto> UpdatePreferencesAsync(
+        UpdateNotificationPreferencesDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        var current = await _repository.GetPreferencesAsync(cancellationToken);
+        var p = new NotificationPreferences
+        {
+            Critical = dto.Critical ?? current.Critical,
+            Ai = dto.Ai ?? current.Ai,
+            Resources = dto.Resources ?? current.Resources,
+            Shelter = dto.Shelter ?? current.Shelter,
+            Partner = dto.Partner ?? current.Partner,
+            Reports = dto.Reports ?? current.Reports,
+            Urgent = dto.Urgent ?? current.Urgent,
+            Referrals = dto.Referrals ?? current.Referrals,
+            Collaboration = dto.Collaboration ?? current.Collaboration,
+            Reporting = dto.Reporting ?? current.Reporting,
+            Team = dto.Team ?? current.Team,
+            Email = dto.Email ?? current.Email,
+            Push = dto.Push ?? current.Push,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        var updated = await _repository.UpdatePreferencesAsync(p, cancellationToken);
+        return new CareLink.Application.DTOs.NotificationPreferencesDto
+        {
+            Critical = updated.Critical,
+            Ai = updated.Ai,
+            Resources = updated.Resources,
+            Shelter = updated.Shelter,
+            Partner = updated.Partner,
+            Reports = updated.Reports,
+            Urgent = updated.Urgent,
+            Referrals = updated.Referrals,
+            Collaboration = updated.Collaboration,
+            Reporting = updated.Reporting,
+            Team = updated.Team,
+            Email = updated.Email,
+            Push = updated.Push,
+            UpdatedAt = updated.UpdatedAt
+        };
+    }
+
+    public async Task<NotificationMetricsDto> GetMetricsAsync(string? role = null, CancellationToken cancellationToken = default)
+    {
+        var m = await _repository.GetMetricsAsync(role, cancellationToken);
+        return new NotificationMetricsDto
+        {
+            All = m.All,
+            Unread = m.Unread,
+            Urgent = m.Urgent,
+            Critical = m.Critical,
+            Ai = m.Ai,
+            Resource = m.Resource,
+            Shelter = m.Shelter,
+            Partner = m.Partner,
+            Report = m.Report,
+            Collaboration = m.Collaboration,
+            Reporting = m.Reporting,
+            Team = m.Team,
+            Agreement = m.Agreement,
+            LastUpdated = m.LastUpdated
+        };
+    }
+
+    public async Task ResetDefaultDataAsync(CancellationToken cancellationToken = default)
+    {
+        await _repository.ResetDefaultDataAsync(cancellationToken);
+    }
+
+    #endregion
+
+    #region Administrative Methods (dev)
+
+    public async Task<ApiResponse<PaginatedListDto<AdminDtos.NotificationDto>>> GetNotificationsAsync(
+        AdminDtos.NotificationQueryDto query)
+    {
+        var all = await _repository.GetAllAsync();
+        var q = all.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var s = query.Search.Trim();
+            q = q.Where(n =>
+                n.Title.Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                (n.Description != null && n.Description.Contains(s, StringComparison.OrdinalIgnoreCase)) ||
+                (n.Reference != null && n.Reference.Contains(s, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Type))
+        {
+            q = q.Where(n => n.Category.Equals(query.Type, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (query.UnreadOnly == true)
+        {
+            q = q.Where(n => n.Unread);
+        }
+
+        var list = q.Select((item, idx) => MapToAdminDto(item, idx + 1)).ToList();
+        var total = list.Count;
+        var paged = list
+            .Skip((query.PageNumber - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .ToList();
+
+        var result = new PaginatedListDto<AdminDtos.NotificationDto>
+        {
+            Items = paged,
+            TotalCount = total,
+            PageNumber = query.PageNumber,
+            PageSize = query.PageSize
+        };
+
+        return ApiResponse<PaginatedListDto<AdminDtos.NotificationDto>>.SuccessResult(result);
+    }
+
+    public async Task<ApiResponse<AdminDtos.NotificationStatsDto>> GetStatsAsync()
+    {
+        var all = await _repository.GetAllAsync();
+        var stats = new AdminDtos.NotificationStatsDto
+        {
+            Total = all.Count,
+            UnreadCount = all.Count(n => n.Unread),
+            CriticalCount = all.Count(n => n.Urgent),
+            HighPriorityCount = all.Count(n => n.Category.Equals("Shelter", StringComparison.OrdinalIgnoreCase) || n.Category.Equals("Resource", StringComparison.OrdinalIgnoreCase)),
+            EmergencyCount = all.Count(n => n.Category.Equals("Emergency", StringComparison.OrdinalIgnoreCase) || n.Urgent),
+            AssistanceCount = all.Count(n => n.Category.Equals("Referrals", StringComparison.OrdinalIgnoreCase) || n.Category.Equals("Referral", StringComparison.OrdinalIgnoreCase)),
+            VolunteerCount = all.Count(n => n.Category.Equals("Team", StringComparison.OrdinalIgnoreCase)),
+            ResourceCount = all.Count(n => n.Category.Equals("Resources", StringComparison.OrdinalIgnoreCase) || n.Category.Equals("Resource", StringComparison.OrdinalIgnoreCase)),
+            SystemCount = all.Count(n => n.Category.Equals("System", StringComparison.OrdinalIgnoreCase))
+        };
+
+        return ApiResponse<AdminDtos.NotificationStatsDto>.SuccessResult(stats);
+    }
+
+    public async Task<ApiResponse<AdminDtos.NotificationDto>> GetNotificationByIdAsync(int id)
+    {
+        var all = await _repository.GetAllAsync();
+        var item = all.FirstOrDefault(n => MatchesIntId(n.Id, id));
+        if (item == null)
+        {
+            return ApiResponse<AdminDtos.NotificationDto>.FailureResult($"Notification '{id}' not found.");
+        }
+
+        return ApiResponse<AdminDtos.NotificationDto>.SuccessResult(MapToAdminDto(item, id));
+    }
+
+    public async Task<ApiResponse<AdminDtos.NotificationDto>> CreateNotificationAsync(
+        AdminDtos.CreateNotificationRequestDto request,
+        string actor)
+    {
+        var item = new NotificationItem
+        {
+            Title = request.Title.Trim(),
+            Description = request.Message.Trim(),
+            Category = request.Type.Trim(),
+            Urgent = request.Priority.Equals("Critical", StringComparison.OrdinalIgnoreCase),
+            Unread = true,
+            Reference = request.Location?.Trim(),
+            ActionLabel = request.Action?.Trim(),
+            ActionUrl = request.ActionUrl?.Trim(),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        var created = await _repository.AddAsync(item);
+        await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
+        {
+            Action = "CreateNotification",
+            Actor = actor,
+            Record = created.Id,
+            Change = $"Created {created.Category} notification",
+            Rationale = created.Title,
+            Type = "Notification"
+        });
+
+        return ApiResponse<AdminDtos.NotificationDto>.SuccessResult(MapToAdminDto(created, 1), "Notification sent.");
+    }
+
+    public async Task<ApiResponse<bool>> MarkAsReadAsync(int id)
+    {
+        var all = await _repository.GetAllAsync();
+        var item = all.FirstOrDefault(n => MatchesIntId(n.Id, id));
+        if (item == null)
+        {
+            return ApiResponse<bool>.FailureResult($"Notification '{id}' not found.");
+        }
+
+        await _repository.MarkReadAsync(item.Id);
+        return ApiResponse<bool>.SuccessResult(true, "Notification marked as read.");
+    }
+
+    public async Task<ApiResponse<bool>> MarkAllAsReadAsync()
+    {
+        await _repository.MarkAllReadAsync();
+        return ApiResponse<bool>.SuccessResult(true, "All notifications marked as read.");
+    }
+
+    public async Task<ApiResponse<bool>> ArchiveNotificationAsync(int id)
+    {
+        var all = await _repository.GetAllAsync();
+        var item = all.FirstOrDefault(n => MatchesIntId(n.Id, id));
+        if (item == null)
+        {
+            return ApiResponse<bool>.FailureResult($"Notification '{id}' not found.");
+        }
+
+        await _repository.DeleteAsync(item.Id);
+        return ApiResponse<bool>.SuccessResult(true, "Notification archived.");
+    }
+
+    public async Task<ApiResponse<int>> BatchActionAsync(
+        AdminDtos.BatchNotificationActionDto request,
+        string actor)
+    {
+        var all = await _repository.GetAllAsync();
+        var targetIds = new HashSet<int>(request.NotificationIds);
+        var matchingItems = all.Where(n => targetIds.Any(tid => MatchesIntId(n.Id, tid))).ToList();
+
+        var affected = 0;
+        foreach (var item in matchingItems)
+        {
+            switch (request.Action.ToLowerInvariant())
             {
-                await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
-                {
-                    Action = "Emergency Notification Broadcasted",
-                    Actor = actor,
-                    Record = $"NOTIF-{id}",
-                    Change = $"Broadcasted Critical Alert: {request.Title}",
-                    Rationale = "Emergency operational alert dissemination",
-                    Type = "Notification",
-                    Environment = "Production"
-                });
-            }
-            catch
-            {
-                // Best effort
+                case "markasread":
+                case "read":
+                    await _repository.MarkReadAsync(item.Id);
+                    affected++;
+                    break;
+                case "delete":
+                case "archive":
+                    await _repository.DeleteAsync(item.Id);
+                    affected++;
+                    break;
             }
         }
 
-        return ApiResponse<NotificationDto>.SuccessResult(MapToDto(entity), "Notification created successfully.");
-    }
-
-    public Task<ApiResponse<bool>> MarkAsReadAsync(int id)
-    {
-        if (_notifications.TryGetValue(id, out var entity))
+        await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
         {
-            entity.Unread = false;
-            entity.ReadAt = DateTime.UtcNow;
-            return Task.FromResult(ApiResponse<bool>.SuccessResult(true, "Notification marked as read."));
-        }
+            Action = "BatchNotificationAction",
+            Actor = actor,
+            Record = string.Join(",", request.NotificationIds),
+            Change = $"Batch {request.Action} performed on {affected} notifications",
+            Rationale = "Batch operation requested by administrator",
+            Type = "System"
+        });
 
-        return Task.FromResult(ApiResponse<bool>.FailureResult("Notification not found."));
+        return ApiResponse<int>.SuccessResult(affected, $"{affected} notifications updated.");
     }
 
-    public Task<ApiResponse<bool>> MarkAllAsReadAsync()
+    public Task<ApiResponse<AdminDtos.NotificationPreferencesDto>> GetAdminPreferencesAsync(string userId)
     {
-        var now = DateTime.UtcNow;
-        foreach (var item in _notifications.Values)
-        {
-            if (item.Unread)
-            {
-                item.Unread = false;
-                item.ReadAt = now;
-            }
-        }
-
-        return Task.FromResult(ApiResponse<bool>.SuccessResult(true, "All notifications marked as read."));
+        var p = _adminPreferences.GetOrAdd(userId, _ => new AdminDtos.NotificationPreferencesDto());
+        return Task.FromResult(ApiResponse<AdminDtos.NotificationPreferencesDto>.SuccessResult(p));
     }
 
-    public Task<ApiResponse<bool>> ArchiveNotificationAsync(int id)
+    public Task<ApiResponse<AdminDtos.NotificationPreferencesDto>> UpdateAdminPreferencesAsync(
+        string userId,
+        AdminDtos.NotificationPreferencesDto preferences)
     {
-        if (_notifications.TryGetValue(id, out var entity))
-        {
-            entity.IsArchived = true;
-            return Task.FromResult(ApiResponse<bool>.SuccessResult(true, "Notification archived."));
-        }
-
-        return Task.FromResult(ApiResponse<bool>.FailureResult("Notification not found."));
+        _adminPreferences[userId] = preferences;
+        return Task.FromResult(ApiResponse<AdminDtos.NotificationPreferencesDto>.SuccessResult(preferences, "Notification preferences updated."));
     }
 
-    public Task<ApiResponse<int>> BatchActionAsync(BatchNotificationActionDto request, string actor)
+    #endregion
+
+    #region Helper Mappers
+
+    private static bool MatchesIntId(string entityId, int intId)
     {
-        var count = 0;
-        var now = DateTime.UtcNow;
-
-        foreach (var id in request.NotificationIds)
-        {
-            if (_notifications.TryGetValue(id, out var entity))
-            {
-                switch (request.Action.ToLowerInvariant())
-                {
-                    case "mark_read":
-                        entity.Unread = false;
-                        entity.ReadAt = now;
-                        count++;
-                        break;
-                    case "mark_unread":
-                        entity.Unread = true;
-                        entity.ReadAt = null;
-                        count++;
-                        break;
-                    case "archive":
-                    case "delete":
-                        entity.IsArchived = true;
-                        count++;
-                        break;
-                }
-            }
-        }
-
-        return Task.FromResult(ApiResponse<int>.SuccessResult(count, $"{count} notifications updated."));
+        if (int.TryParse(entityId, out var id) && id == intId) return true;
+        var digitsOnly = System.Text.RegularExpressions.Regex.Replace(entityId, @"\D", "");
+        return int.TryParse(digitsOnly, out var num) && num == intId;
     }
 
-    public Task<ApiResponse<NotificationPreferencesDto>> GetPreferencesAsync(string userId)
-    {
-        if (!_preferences.TryGetValue(userId, out var prefs))
-        {
-            prefs = new NotificationPreferencesDto();
-            _preferences.TryAdd(userId, prefs);
-        }
-
-        return Task.FromResult(ApiResponse<NotificationPreferencesDto>.SuccessResult(prefs));
-    }
-
-    public Task<ApiResponse<NotificationPreferencesDto>> UpdatePreferencesAsync(string userId, NotificationPreferencesDto preferences)
-    {
-        _preferences.AddOrUpdate(userId, preferences, (_, _) => preferences);
-        return Task.FromResult(ApiResponse<NotificationPreferencesDto>.SuccessResult(preferences, "Preferences saved successfully."));
-    }
-
-    private static NotificationDto MapToDto(SystemNotification entity)
+    private static NotificationDto MapToSafnaDto(NotificationItem item)
     {
         return new NotificationDto
         {
-            Id = entity.Id,
-            Type = entity.Type,
-            Title = entity.Title,
-            Message = entity.Message,
-            Priority = entity.Priority,
-            Time = FormatRelativeTime(entity.CreatedAt),
-            Date = FormatDateHeader(entity.CreatedAt),
-            CreatedAt = entity.CreatedAt,
-            Location = entity.Location,
-            Unread = entity.Unread,
-            Action = entity.Action,
-            ActionUrl = entity.ActionUrl
+            Id = item.Id,
+            Title = item.Title,
+            Description = item.Description,
+            Time = FormatTime(item),
+            Category = item.Category,
+            Unread = item.Unread,
+            Urgent = item.Urgent,
+            Reference = item.Reference,
+            Details = item.Details,
+            ActionUrl = item.ActionUrl,
+            ActionLabel = item.ActionLabel,
+            TargetRole = item.TargetRole,
+            CreatedAt = item.CreatedAt
         };
     }
 
-    private static string FormatRelativeTime(DateTime createdAt)
+    private static AdminDtos.NotificationDto MapToAdminDto(NotificationItem item, int fallbackId = 1)
     {
-        var span = DateTime.UtcNow - createdAt;
-        if (span.TotalMinutes < 1) return "Just now";
-        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
-        if (span.TotalHours < 24)
+        var digitsOnly = System.Text.RegularExpressions.Regex.Replace(item.Id, @"\D", "");
+        var idNum = int.TryParse(digitsOnly, out var parsed) ? parsed : fallbackId;
+
+        return new AdminDtos.NotificationDto
         {
-            var h = (int)span.TotalHours;
-            return $"{h} hour{(h > 1 ? "s" : "")} ago";
-        }
-        if (span.TotalDays < 2) return "Yesterday";
-        if (span.TotalDays < 7) return $"{(int)span.TotalDays} days ago";
-        return createdAt.ToString("MMM dd");
+            Id = idNum,
+            Type = item.Category,
+            Title = item.Title,
+            Message = item.Description ?? string.Empty,
+            Priority = item.Urgent ? "Critical" : "Normal",
+            Location = item.Reference ?? string.Empty,
+            Action = item.ActionLabel,
+            ActionUrl = item.ActionUrl,
+            Unread = item.Unread,
+            CreatedAt = item.CreatedAt.UtcDateTime
+        };
     }
 
-    private static string FormatDateHeader(DateTime createdAt)
+    private static string FormatTime(NotificationItem item)
     {
-        var span = DateTime.UtcNow.Date - createdAt.Date;
-        if (span.Days == 0) return "Today";
-        if (span.Days == 1) return "Yesterday";
-        return createdAt.ToString("yyyy-MM-dd");
+        if (!string.IsNullOrWhiteSpace(item.Time))
+        {
+            return item.Time;
+        }
+
+        var elapsed = DateTimeOffset.UtcNow - item.CreatedAt;
+        if (elapsed.TotalMinutes < 2) return "Just now";
+        if (elapsed.TotalMinutes < 60) return $"{(int)elapsed.TotalMinutes} min ago";
+        if (elapsed.TotalHours < 24) return $"{(int)elapsed.TotalHours} hr ago";
+        if (elapsed.TotalDays < 7) return $"{(int)elapsed.TotalDays}d ago";
+        return item.CreatedAt.ToString("MMM dd, yyyy");
     }
+
+    #endregion
 }

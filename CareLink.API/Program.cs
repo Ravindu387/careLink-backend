@@ -1,11 +1,13 @@
 using System.Text;
 using CareLink.API.Authorization;
+using CareLink.Application;
 using CareLink.Application.Common;
 using CareLink.Application.Interfaces;
 using CareLink.Application.Services;
 using CareLink.Core.Constants;
 using CareLink.Core.Entities;
 using CareLink.Core.Interfaces;
+using CareLink.Infrastructure;
 using CareLink.Infrastructure.Data;
 using CareLink.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -96,7 +98,11 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
-// 4. Register Application & Infrastructure Services (Dependency Injection)
+// 4. Register Application & Infrastructure Clean Architecture layers
+builder.Services.AddApplicationServices();
+builder.Services.AddInfrastructureServices();
+
+// Configure Email settings and additional admin infrastructure services
 builder.Services.Configure<EmailSettings>(
     builder.Configuration.GetSection(EmailSettings.SectionName));
 builder.Services.AddMemoryCache();
@@ -111,11 +117,8 @@ builder.Services.AddSingleton<IAiRecommendationService, AiRecommendationService>
 builder.Services.AddSingleton<ISecurityEventService, SecurityEventService>();
 builder.Services.AddSingleton<IAuditLogService, AuditLogService>();
 builder.Services.AddSingleton<IVerificationService, VerificationService>();
-builder.Services.AddSingleton<INotificationService, NotificationService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IOrganizationService, OrganizationService>();
-builder.Services.AddSingleton<IAssistanceRequestService, AssistanceRequestService>();
-builder.Services.AddSingleton<ISettingsService, SettingsService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 
 // 5. Register Controllers & OpenAPI Documentation

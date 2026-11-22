@@ -1,163 +1,274 @@
 using System.Security.Claims;
 using CareLink.Application.Common;
-using CareLink.Application.DTOs.Notifications;
+using CareLink.Application.DTOs;
 using CareLink.Application.DTOs.Users;
 using CareLink.Application.Interfaces;
 using CareLink.Core.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using AdminDtos = CareLink.Application.DTOs.Notifications;
 
 namespace CareLink.API.Controllers;
 
 [ApiController]
 [Route("api/notifications")]
-[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.IncidentManager},{UserRoles.VolunteerCoordinator},{UserRoles.ShelterAdmin}")]
 public class NotificationsController : ControllerBase
 {
-    private readonly INotificationService _notificationService;
+    private readonly INotificationService _service;
+    private readonly ILogger<NotificationsController> _logger;
 
-    public NotificationsController(INotificationService notificationService)
+    public NotificationsController(
+        INotificationService service,
+        ILogger<NotificationsController> logger)
     {
-        _notificationService = notificationService;
+        _service = service;
+        _logger = logger;
     }
 
     /// <summary>
-    /// Retrieve paginated notifications with optional type, priority, and text search filters.
+    /// Retrieves notifications. Supports paged coordinator queries and administrative queries.
     /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(ApiResponse<PaginatedListDto<NotificationDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetNotifications([FromQuery] NotificationQueryDto query)
+    [ProducesResponseType(typeof(PagedNotificationsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<PaginatedListDto<AdminDtos.NotificationDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAll(
+        [FromQuery] NotificationQueryParameters query,
+        [FromQuery] string? type,
+        [FromQuery] int? pageNumber,
+        [FromQuery] int? pageSize,
+        [FromQuery] bool? paged,
+        CancellationToken cancellationToken)
     {
-        var result = await _notificationService.GetNotificationsAsync(query);
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Retrieve notification count statistics across unread, critical, high-priority, and domain categories.
-    /// </summary>
-    [HttpGet("stats")]
-    [ProducesResponseType(typeof(ApiResponse<NotificationStatsDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetStats()
-    {
-        var result = await _notificationService.GetStatsAsync();
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Retrieve a single notification by its identifier.
-    /// </summary>
-    [HttpGet("{id:int}")]
-    [ProducesResponseType(typeof(ApiResponse<NotificationDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<NotificationDto>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetById(int id)
-    {
-        var result = await _notificationService.GetNotificationByIdAsync(id);
-        if (!result.Success)
+        if (!string.IsNullOrWhiteSpace(type) || pageNumber.HasValue || pageSize.HasValue)
         {
-            return NotFound(result);
+            var adminQuery = new AdminDtos.NotificationQueryDto
+            {
+                Search = query.Search,
+                Type = type,
+                UnreadOnly = query.UnreadOnly ?? false,
+                PageNumber = pageNumber ?? query.Page,
+                PageSize = pageSize ?? query.PageSize
+            };
+
+            var adminResult = await _service.GetNotificationsAsync(adminQuery);
+            return Ok(adminResult);
         }
 
+        var effectiveRole = DetermineRole(query.Role);
+        query.Role = effectiveRole;
+
+        if (paged == false)
+        {
+            var list = await _service.GetAllAsync(query, cancellationToken);
+            return Ok(list);
+        }
+
+        var result = await _service.GetPagedAsync(query, cancellationToken);
         return Ok(result);
     }
 
     /// <summary>
-    /// Broadcast or dispatch a new operational alert or emergency notification.
+    /// Aggregates and returns real-time notification operational metrics.
     /// </summary>
-    [HttpPost]
-    [ProducesResponseType(typeof(ApiResponse<NotificationDto>), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ApiResponse<NotificationDto>), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> CreateNotification([FromBody] CreateNotificationRequestDto request)
+    [HttpGet("metrics")]
+    [ProducesResponseType(typeof(NotificationMetricsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMetrics(
+        [FromQuery] string? role,
+        CancellationToken cancellationToken)
+    {
+        var effectiveRole = DetermineRole(role);
+        var metrics = await _service.GetMetricsAsync(effectiveRole, cancellationToken);
+        return Ok(metrics);
+    }
+
+    /// <summary>
+    /// Retrieve notification count statistics across unread, critical, high-priority, and domain categories (Admin).
+    /// </summary>
+    [HttpGet("stats")]
+    [ProducesResponseType(typeof(ApiResponse<AdminDtos.NotificationStatsDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetStats()
+    {
+        var result = await _service.GetStatsAsync();
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Retrieves all unread notifications.
+    /// </summary>
+    [HttpGet("unread")]
+    [ProducesResponseType(typeof(IReadOnlyList<NotificationDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetUnread(
+        [FromQuery] string? role,
+        CancellationToken cancellationToken)
+    {
+        var effectiveRole = DetermineRole(role);
+        var query = new NotificationQueryParameters { UnreadOnly = true, Role = effectiveRole };
+        var unread = await _service.GetAllAsync(query, cancellationToken);
+        return Ok(unread);
+    }
+
+    /// <summary>
+    /// Retrieves user notification preferences.
+    /// </summary>
+    [HttpGet("preferences")]
+    [ProducesResponseType(typeof(CareLink.Application.DTOs.NotificationPreferencesDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPreferences(CancellationToken cancellationToken)
+    {
+        var prefs = await _service.GetPreferencesAsync(cancellationToken);
+        return Ok(prefs);
+    }
+
+    /// <summary>
+    /// Updates user notification preferences.
+    /// </summary>
+    [HttpPut("preferences")]
+    [ProducesResponseType(typeof(CareLink.Application.DTOs.NotificationPreferencesDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdatePreferences(
+        [FromBody] UpdateNotificationPreferencesDto dto,
+        CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
-            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-            return BadRequest(ApiResponse<NotificationDto>.FailureResult("Validation failed.", errors));
+            return BadRequest(ModelState);
         }
 
-        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "System Administrator";
-        var result = await _notificationService.CreateNotificationAsync(request, actor);
-
-        return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
+        var updated = await _service.UpdatePreferencesAsync(dto, cancellationToken);
+        _logger.LogInformation("Notification preferences updated.");
+        return Ok(updated);
     }
 
     /// <summary>
-    /// Mark a specific notification as read.
+    /// Retrieves a single notification by unique id.
     /// </summary>
-    [HttpPatch("{id:int}/read")]
-    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> MarkAsRead(int id)
+    [HttpGet("{id}")]
+    [ProducesResponseType(typeof(NotificationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetById(
+        string id,
+        CancellationToken cancellationToken)
     {
-        var result = await _notificationService.MarkAsReadAsync(id);
-        if (!result.Success)
+        var item = await _service.GetByIdAsync(id, cancellationToken);
+        if (item == null)
         {
-            return NotFound(result);
+            return NotFound(new { message = $"Notification '{id}' not found." });
         }
 
-        return Ok(result);
+        return Ok(item);
     }
 
     /// <summary>
-    /// Mark all active notifications as read.
+    /// Marks a specific notification as read.
+    /// </summary>
+    [HttpPatch("{id}/read")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MarkRead(
+        string id,
+        CancellationToken cancellationToken)
+    {
+        var success = await _service.MarkReadAsync(id, cancellationToken);
+        if (!success)
+        {
+            return NotFound(new { message = $"Notification '{id}' not found." });
+        }
+
+        return Ok(new { id, unread = false, message = "Notification marked as read." });
+    }
+
+    /// <summary>
+    /// Marks all notifications as read.
     /// </summary>
     [HttpPost("mark-all-read")]
-    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> MarkAllAsRead()
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> MarkAllRead(
+        [FromQuery] string? role,
+        CancellationToken cancellationToken)
     {
-        var result = await _notificationService.MarkAllAsReadAsync();
-        return Ok(result);
+        var effectiveRole = DetermineRole(role);
+        var updatedCount = await _service.MarkAllReadAsync(effectiveRole, cancellationToken);
+        _logger.LogInformation("Marked all notifications as read ({Count} updated) for role {Role}.", updatedCount, effectiveRole ?? "all");
+        return Ok(new { readCount = updatedCount, message = "All notifications marked as read." });
     }
 
     /// <summary>
-    /// Archive a notification from active view.
+    /// Creates and dispatches a new operational notification.
     /// </summary>
-    [HttpDelete("{id:int}")]
-    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ArchiveNotification(int id)
+    [HttpPost]
+    [ProducesResponseType(typeof(NotificationDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Create(
+        [FromBody] CreateNotificationDto dto,
+        CancellationToken cancellationToken)
     {
-        var result = await _notificationService.ArchiveNotificationAsync(id);
-        if (!result.Success)
+        if (!ModelState.IsValid)
         {
-            return NotFound(result);
+            return BadRequest(ModelState);
         }
 
-        return Ok(result);
+        var created = await _service.CreateAsync(dto, cancellationToken);
+        _logger.LogInformation("Notification {Id} created for {Category}: {Title}",
+            created.Id, created.Category, created.Title);
+
+        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
     /// <summary>
-    /// Execute batch operation (mark read, unread, archive) across multiple notifications.
+    /// Deletes or archives a notification.
+    /// </summary>
+    [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(
+        string id,
+        CancellationToken cancellationToken)
+    {
+        var deleted = await _service.DeleteAsync(id, cancellationToken);
+        if (!deleted)
+        {
+            return NotFound(new { message = $"Notification '{id}' not found." });
+        }
+
+        return Ok(new { id, message = $"Notification '{id}' deleted successfully." });
+    }
+
+    /// <summary>
+    /// Execute batch operation across multiple notifications (Admin).
     /// </summary>
     [HttpPost("batch")]
     [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> BatchAction([FromBody] BatchNotificationActionDto request)
+    public async Task<IActionResult> BatchAction([FromBody] AdminDtos.BatchNotificationActionDto request)
     {
         var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "System Administrator";
-        var result = await _notificationService.BatchActionAsync(request, actor);
+        var result = await _service.BatchActionAsync(request, actor);
         return Ok(result);
     }
 
     /// <summary>
-    /// Retrieve operational notification preferences for the current operator.
+    /// Resets all notifications and preferences back to default seed data.
     /// </summary>
-    [HttpGet("preferences")]
-    [ProducesResponseType(typeof(ApiResponse<NotificationPreferencesDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetPreferences()
+    [HttpPost("reset")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ResetDefaultData(CancellationToken cancellationToken)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "default";
-        var result = await _notificationService.GetPreferencesAsync(userId);
-        return Ok(result);
+        await _service.ResetDefaultDataAsync(cancellationToken);
+        _logger.LogInformation("Notifications reset to default seed scenario.");
+        return Ok(new { message = "Notifications reset to default seed scenario." });
     }
 
-    /// <summary>
-    /// Update notification alert delivery preferences.
-    /// </summary>
-    [HttpPut("preferences")]
-    [ProducesResponseType(typeof(ApiResponse<NotificationPreferencesDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> UpdatePreferences([FromBody] NotificationPreferencesDto preferences)
+    private string? DetermineRole(string? explicitRole)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "default";
-        var result = await _notificationService.UpdatePreferencesAsync(userId, preferences);
-        return Ok(result);
+        if (!string.IsNullOrWhiteSpace(explicitRole))
+        {
+            return explicitRole.Trim().ToLowerInvariant();
+        }
+
+        var path = Request.Path.Value ?? string.Empty;
+        if (path.Contains("/partner/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "partner";
+        }
+
+        return null;
     }
 }
