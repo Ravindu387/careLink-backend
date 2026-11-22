@@ -25,4 +25,8 @@ public interface ISettingsRepository
     Task<bool> VerifyPartnerPasswordAsync(string currentPassword, CancellationToken cancellationToken = default);
     Task<bool> ChangePartnerPasswordAsync(string newPassword, CancellationToken cancellationToken = default);
     Task<PartnerSettings> ResetPartnerSettingsAsync(CancellationToken cancellationToken = default);
+
+    // Shelter Admin User Settings
+    Task<UserSettings?> GetAsync();
+    Task<UserSettings> UpsertAsync(UserSettings settings);
 }

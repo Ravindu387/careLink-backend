@@ -30,4 +30,14 @@ public interface ISettingsService
     Task<PartnerSecuritySettingsDto> UpdatePartnerSecurityAsync(UpdatePartnerSecuritySettingsDto dto, CancellationToken cancellationToken = default);
     Task<ChangePasswordResponseDto> ChangePartnerPasswordAsync(ChangePasswordRequestDto dto, CancellationToken cancellationToken = default);
     Task<PartnerSettingsDto> ResetPartnerSettingsAsync(CancellationToken cancellationToken = default);
+
+    // Shelter Admin Settings
+    Task<ProfileDto> GetProfileAsync();
+    Task<ProfileDto> UpdateProfileAsync(ProfileDto dto);
+    Task<ShelterSettingsDto> GetShelterSettingsAsync();
+    Task<ShelterSettingsDto> UpdateShelterSettingsAsync(ShelterSettingsDto dto);
+    Task<SecuritySettingsDto> GetSecuritySettingsAsync();
+    Task<bool> UpdateSecuritySettingsAsync(SecuritySettingsDto dto);
+    Task<NotificationSettingsDto> GetNotificationSettingsAsync();
+    Task<NotificationSettingsDto> UpdateNotificationSettingsAsync(NotificationSettingsDto dto);
 }

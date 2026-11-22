@@ -2,21 +2,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace CareLink.Application.DTOs;
 
-public class ResourceDto
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string Category { get; set; } = string.Empty;
-    public string Location { get; set; } = string.Empty;
-    public int Available { get; set; }
-    public int Reserved { get; set; }
-    public int Availability { get; set; }
-    public string Status { get; set; } = "Healthy";
-    public string Unit { get; set; } = "Units";
-    public DateTimeOffset LastRestocked { get; set; }
-    public DateTimeOffset UpdatedAt { get; set; }
-}
-
 public class ResourceMetricsDto
 {
     public int AvailabilityPercent { get; set; }
@@ -99,13 +84,4 @@ public class UpdateResourceStockDto
 
     [RegularExpression("^(Healthy|Low Stock|Critical)$", ErrorMessage = "Status must be Healthy, Low Stock, or Critical.")]
     public string? Status { get; set; }
-}
-
-public class ResourceQueryParameters
-{
-    public string? Search { get; set; }
-    public string? Area { get; set; }
-    public string? Status { get; set; }
-    public string? Availability { get; set; }
-    public string? Category { get; set; }
 }

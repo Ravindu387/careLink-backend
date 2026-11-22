@@ -1,9 +1,11 @@
 using CareLink.Application.DTOs;
+using CareLink.Core.Models;
 
 namespace CareLink.Application.Interfaces;
 
 public interface IShelterService
 {
+    // Operational & Coordinator Methods (Safna)
     Task<IReadOnlyList<ShelterDto>> GetAllAsync(
         ShelterQueryParameters query,
         CancellationToken cancellationToken = default);
@@ -21,4 +23,11 @@ public interface IShelterService
     Task<ShelterMetricsDto> GetMetricsAsync(CancellationToken cancellationToken = default);
 
     Task ResetToDefaultAsync(CancellationToken cancellationToken = default);
+
+    // Shelter Management Methods (Prabhani)
+    Task<IEnumerable<ShelterDto>> GetAllSheltersAsync(CancellationToken cancellationToken = default);
+    Task<ShelterDto?> GetShelterByIdAsync(string id, CancellationToken cancellationToken = default);
+    Task<PagedResultDto<ShelterDto>> GetSheltersPagedAsync(ShelterQueryParameters parameters, CancellationToken cancellationToken = default);
+    Task<ShelterSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default);
+    Task<ShelterDto> CreateShelterAsync(CreateShelterDto dto, CancellationToken cancellationToken = default);
 }

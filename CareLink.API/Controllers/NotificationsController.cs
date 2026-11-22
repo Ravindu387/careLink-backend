@@ -4,6 +4,7 @@ using CareLink.Application.DTOs;
 using CareLink.Application.DTOs.Users;
 using CareLink.Application.Interfaces;
 using CareLink.Core.Constants;
+using CareLink.Core.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using AdminDtos = CareLink.Application.DTOs.Notifications;
@@ -26,7 +27,7 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves notifications. Supports paged coordinator queries and administrative queries.
+    /// Retrieves notifications. Supports paged coordinator queries, administrative queries, and shelter/funding filters.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(PagedNotificationsDto), StatusCodes.Status200OK)]
@@ -63,7 +64,7 @@ public class NotificationsController : ControllerBase
             return Ok(list);
         }
 
-        var result = await _service.GetPagedAsync(query, cancellationToken);
+        var result = await _service.GetPagedNotificationsAsync(query, cancellationToken);
         return Ok(result);
     }
 
@@ -93,6 +94,30 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
+    /// Gets aggregated summary counts for notifications (Shelter & Funding).
+    /// </summary>
+    [HttpGet("summary")]
+    public async Task<ActionResult<NotificationSummaryDto>> GetSummary(
+        [FromQuery] string? role = "ShelterAdmin",
+        CancellationToken cancellationToken = default)
+    {
+        var summary = await _service.GetSummaryAsync(role, cancellationToken);
+        return Ok(summary);
+    }
+
+    /// <summary>
+    /// Gets quick unread count for badge indicators.
+    /// </summary>
+    [HttpGet("unread-count")]
+    public async Task<ActionResult<object>> GetUnreadCount(
+        [FromQuery] string? role = "ShelterAdmin",
+        CancellationToken cancellationToken = default)
+    {
+        var count = await _service.GetUnreadCountAsync(role, cancellationToken);
+        return Ok(new { count });
+    }
+
+    /// <summary>
     /// Retrieves all unread notifications.
     /// </summary>
     [HttpGet("unread")]
@@ -102,7 +127,7 @@ public class NotificationsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var effectiveRole = DetermineRole(role);
-        var query = new NotificationQueryParameters { UnreadOnly = true, Role = effectiveRole };
+        var query = new NotificationQueryParameters { Unread = true, Role = effectiveRole };
         var unread = await _service.GetAllAsync(query, cancellationToken);
         return Ok(unread);
     }
@@ -111,9 +136,16 @@ public class NotificationsController : ControllerBase
     /// Retrieves user notification preferences.
     /// </summary>
     [HttpGet("preferences")]
-    [ProducesResponseType(typeof(CareLink.Application.DTOs.NotificationPreferencesDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetPreferences(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetPreferences(
+        [FromQuery] string? role,
+        CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            var p = await _service.GetPreferencesAsync(role, cancellationToken);
+            return Ok(p);
+        }
+
         var prefs = await _service.GetPreferencesAsync(cancellationToken);
         return Ok(prefs);
     }
@@ -122,15 +154,33 @@ public class NotificationsController : ControllerBase
     /// Updates user notification preferences.
     /// </summary>
     [HttpPut("preferences")]
-    [ProducesResponseType(typeof(CareLink.Application.DTOs.NotificationPreferencesDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdatePreferences(
         [FromBody] UpdateNotificationPreferencesDto dto,
+        [FromQuery] string? role,
         CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
             return BadRequest(ModelState);
+        }
+
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            var prefDto = new UpdateNotificationPreferenceDto
+            {
+                Critical = dto.Critical ?? true,
+                Email = dto.Email ?? false,
+                InApp = dto.Push ?? true,
+                Sms = false,
+                Requests = dto.Referrals ?? true,
+                Inventory = dto.Resources ?? true,
+                System = dto.Reports ?? false,
+                Verification = true,
+                Campaigns = true,
+                Reports = dto.Reports ?? true
+            };
+            var saved = await _service.SavePreferencesAsync(role, prefDto, cancellationToken);
+            return Ok(saved);
         }
 
         var updated = await _service.UpdatePreferencesAsync(dto, cancellationToken);
@@ -142,12 +192,16 @@ public class NotificationsController : ControllerBase
     /// Retrieves a single notification by unique id.
     /// </summary>
     [HttpGet("{id}")]
-    [ProducesResponseType(typeof(NotificationDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(
         string id,
         CancellationToken cancellationToken)
     {
+        if (int.TryParse(id, out var intId))
+        {
+            var itemById = await _service.GetNotificationByIdAsync(intId, cancellationToken);
+            if (itemById != null) return Ok(itemById);
+        }
+
         var item = await _service.GetByIdAsync(id, cancellationToken);
         if (item == null)
         {
@@ -161,12 +215,17 @@ public class NotificationsController : ControllerBase
     /// Marks a specific notification as read.
     /// </summary>
     [HttpPatch("{id}/read")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [HttpPost("{id}/read")]
     public async Task<IActionResult> MarkRead(
         string id,
         CancellationToken cancellationToken)
     {
+        if (int.TryParse(id, out var intId))
+        {
+            var successInt = await _service.MarkAsReadAsync(intId, cancellationToken);
+            if (successInt) return Ok(new { id, unread = false, message = "Notification marked as read." });
+        }
+
         var success = await _service.MarkReadAsync(id, cancellationToken);
         if (!success)
         {
@@ -188,15 +247,13 @@ public class NotificationsController : ControllerBase
         var effectiveRole = DetermineRole(role);
         var updatedCount = await _service.MarkAllReadAsync(effectiveRole, cancellationToken);
         _logger.LogInformation("Marked all notifications as read ({Count} updated) for role {Role}.", updatedCount, effectiveRole ?? "all");
-        return Ok(new { readCount = updatedCount, message = "All notifications marked as read." });
+        return Ok(new { readCount = updatedCount, count = updatedCount, message = $"{updatedCount} notifications marked as read." });
     }
 
     /// <summary>
-    /// Creates and dispatches a new operational notification.
+    /// Creates and dispatches a new notification.
     /// </summary>
     [HttpPost]
-    [ProducesResponseType(typeof(NotificationDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create(
         [FromBody] CreateNotificationDto dto,
         CancellationToken cancellationToken)
@@ -206,24 +263,39 @@ public class NotificationsController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        var created = await _service.CreateAsync(dto, cancellationToken);
-        _logger.LogInformation("Notification {Id} created for {Category}: {Title}",
-            created.Id, created.Category, created.Title);
+        try
+        {
+            var created = await _service.CreateNotificationAsync(dto, cancellationToken);
+            _logger.LogInformation("Notification {Id} created for {Category}: {Title}",
+                created.Id, created.Type, created.Title);
 
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating notification");
+            return StatusCode(500, new { message = "An error occurred while creating the notification." });
+        }
     }
 
     /// <summary>
     /// Deletes or archives a notification.
     /// </summary>
     [HttpDelete("{id}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(
         string id,
         CancellationToken cancellationToken)
     {
-        var deleted = await _service.DeleteAsync(id, cancellationToken);
+        bool deleted;
+        if (int.TryParse(id, out var intId))
+        {
+            deleted = await _service.DeleteNotificationAsync(intId, cancellationToken);
+        }
+        else
+        {
+            deleted = await _service.DeleteAsync(id, cancellationToken);
+        }
+
         if (!deleted)
         {
             return NotFound(new { message = $"Notification '{id}' not found." });

@@ -101,6 +101,70 @@ public class SettingsController : ControllerBase
 
     #endregion
 
+    #region Shelter Admin Endpoints (Prabhani)
+
+    // ── Profile ──────────────────────────────────────────
+    [HttpGet("profile")]
+    public async Task<IActionResult> GetProfile()
+    {
+        var result = await _settingsService.GetProfileAsync();
+        return Ok(result);
+    }
+
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] ProfileDto dto)
+    {
+        var result = await _settingsService.UpdateProfileAsync(dto);
+        return Ok(result);
+    }
+
+    // ── Shelter Settings ─────────────────────────────────
+    [HttpGet("shelter")]
+    public async Task<IActionResult> GetShelter()
+    {
+        var result = await _settingsService.GetShelterSettingsAsync();
+        return Ok(result);
+    }
+
+    [HttpPut("shelter")]
+    public async Task<IActionResult> UpdateShelter([FromBody] ShelterSettingsDto dto)
+    {
+        var result = await _settingsService.UpdateShelterSettingsAsync(dto);
+        return Ok(result);
+    }
+
+    // ── Security Settings ────────────────────────────────
+    [HttpGet("security")]
+    public async Task<IActionResult> GetSecurity()
+    {
+        var result = await _settingsService.GetSecuritySettingsAsync();
+        return Ok(result);
+    }
+
+    [HttpPut("security")]
+    public async Task<IActionResult> UpdateSecurity([FromBody] SecuritySettingsDto dto)
+    {
+        await _settingsService.UpdateSecuritySettingsAsync(dto);
+        return Ok(new { message = "Security settings updated." });
+    }
+
+    // ── Notifications Settings ───────────────────────────
+    [HttpGet("notifications")]
+    public async Task<IActionResult> GetNotifications()
+    {
+        var result = await _settingsService.GetNotificationSettingsAsync();
+        return Ok(result);
+    }
+
+    [HttpPut("notifications")]
+    public async Task<IActionResult> UpdateNotifications([FromBody] NotificationSettingsDto dto)
+    {
+        var result = await _settingsService.UpdateNotificationSettingsAsync(dto);
+        return Ok(result);
+    }
+
+    #endregion
+
     #region Coordinator Settings Endpoints
 
     /// <summary>
@@ -117,7 +181,7 @@ public class SettingsController : ControllerBase
     /// <summary>
     /// Updates the Emergency Coordinator profile.
     /// </summary>
-    [HttpPut("profile")]
+    [HttpPut("coordinator/profile")]
     [ProducesResponseType(typeof(CoordinatorProfileSettingsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CoordinatorProfileSettingsDto>> UpdateCoordinatorProfile(
@@ -137,6 +201,7 @@ public class SettingsController : ControllerBase
     /// Updates the Emergency Coordinator operational preferences.
     /// </summary>
     [HttpPut("operational")]
+    [HttpPut("coordinator/operational")]
     [ProducesResponseType(typeof(CoordinatorOperationalSettingsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CoordinatorOperationalSettingsDto>> UpdateCoordinatorOperational(
@@ -155,7 +220,7 @@ public class SettingsController : ControllerBase
     /// <summary>
     /// Updates Emergency Coordinator notification preferences.
     /// </summary>
-    [HttpPut("notifications")]
+    [HttpPut("coordinator/notifications")]
     [ProducesResponseType(typeof(CoordinatorNotificationSettingsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CoordinatorNotificationSettingsDto>> UpdateCoordinatorNotifications(
@@ -175,6 +240,7 @@ public class SettingsController : ControllerBase
     /// Changes the Emergency Coordinator password.
     /// </summary>
     [HttpPost("change-password")]
+    [HttpPost("coordinator/change-password")]
     [ProducesResponseType(typeof(ChangePasswordResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ChangePasswordResponseDto), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ChangePasswordResponseDto>> ChangeCoordinatorPassword(
@@ -199,6 +265,7 @@ public class SettingsController : ControllerBase
     /// Retrieves active login sessions for the Emergency Coordinator.
     /// </summary>
     [HttpGet("sessions")]
+    [HttpGet("coordinator/sessions")]
     [ProducesResponseType(typeof(IReadOnlyList<UserSessionDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<UserSessionDto>>> GetCoordinatorSessions(CancellationToken cancellationToken)
     {
@@ -210,6 +277,7 @@ public class SettingsController : ControllerBase
     /// Revokes an active session.
     /// </summary>
     [HttpDelete("sessions/{sessionId}")]
+    [HttpDelete("coordinator/sessions/{sessionId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeSession(string sessionId, CancellationToken cancellationToken)

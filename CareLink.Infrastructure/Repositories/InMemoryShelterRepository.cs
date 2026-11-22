@@ -1,5 +1,6 @@
 using CareLink.Core.Entities;
 using CareLink.Core.Interfaces;
+using CareLink.Core.Models;
 
 namespace CareLink.Infrastructure.Repositories;
 
@@ -29,6 +30,7 @@ public class InMemoryShelterRepository : IShelterRepository
                     query = query.Where(item =>
                         item.Name.ToLowerInvariant().Contains(s) ||
                         item.Location.ToLowerInvariant().Contains(s) ||
+                        item.District.ToLowerInvariant().Contains(s) ||
                         item.Services.Any(svc => svc.ToLowerInvariant().Contains(s)) ||
                         (item.Notes != null && item.Notes.ToLowerInvariant().Contains(s)));
                 }
@@ -38,7 +40,8 @@ public class InMemoryShelterRepository : IShelterRepository
                     !filter.Area.Equals("All", StringComparison.OrdinalIgnoreCase))
                 {
                     query = query.Where(item =>
-                        item.Location.Equals(filter.Area.Trim(), StringComparison.OrdinalIgnoreCase));
+                        item.Location.Equals(filter.Area.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                        item.District.Equals(filter.Area.Trim(), StringComparison.OrdinalIgnoreCase));
                 }
 
                 if (!string.IsNullOrWhiteSpace(filter.Status) &&
@@ -75,11 +78,36 @@ public class InMemoryShelterRepository : IShelterRepository
         }
     }
 
+    public Task<IEnumerable<Shelter>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            var list = _shelters.OrderBy(s => s.Id).Select(CloneShelter).ToList();
+            return Task.FromResult<IEnumerable<Shelter>>(list);
+        }
+    }
+
     public Task<Shelter?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
-            var shelter = _shelters.FirstOrDefault(s => s.Id == id);
+            var idStr = id.ToString();
+            var code = $"SH-{id:D3}";
+            var shelter = _shelters.FirstOrDefault(s => s.Id == idStr || s.Id == code)
+                ?? _shelters.FirstOrDefault(s => int.TryParse(s.Id.Replace("SH-", ""), out var parsed) && parsed == id);
+            return Task.FromResult(shelter == null ? null : CloneShelter(shelter));
+        }
+    }
+
+    public Task<Shelter?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            var shelter = _shelters.FirstOrDefault(s => s.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            if (shelter == null && int.TryParse(id, out var intId))
+            {
+                return GetByIdAsync(intId, cancellationToken);
+            }
             return Task.FromResult(shelter == null ? null : CloneShelter(shelter));
         }
     }
@@ -88,11 +116,23 @@ public class InMemoryShelterRepository : IShelterRepository
     {
         lock (_lock)
         {
-            int nextId = _shelters.Count > 0 ? _shelters.Max(s => s.Id) + 1 : 1;
-            shelter.Id = nextId;
+            if (string.IsNullOrWhiteSpace(shelter.Id))
+            {
+                int maxId = 0;
+                foreach (var s in _shelters)
+                {
+                    var clean = s.Id.Replace("SH-", "");
+                    if (int.TryParse(clean, out var parsed) && parsed > maxId) maxId = parsed;
+                }
+                shelter.Id = $"SH-{maxId + 1:D3}";
+            }
+            if (string.IsNullOrWhiteSpace(shelter.District))
+            {
+                shelter.District = shelter.Location;
+            }
             shelter.CreatedAt = DateTimeOffset.UtcNow;
             shelter.UpdatedAt = DateTimeOffset.UtcNow;
-            shelter.Status = ComputeStatus(shelter.Capacity, shelter.Occupied);
+            shelter.Status = ComputeStatus(shelter.Capacity, shelter.CurrentOccupancy);
 
             _shelters.Add(CloneShelter(shelter));
             return Task.FromResult(CloneShelter(shelter));
@@ -103,7 +143,7 @@ public class InMemoryShelterRepository : IShelterRepository
     {
         lock (_lock)
         {
-            var existing = _shelters.FirstOrDefault(s => s.Id == shelter.Id);
+            var existing = _shelters.FirstOrDefault(s => s.Id.Equals(shelter.Id, StringComparison.OrdinalIgnoreCase));
             if (existing == null)
             {
                 return Task.FromResult<Shelter?>(null);
@@ -111,11 +151,14 @@ public class InMemoryShelterRepository : IShelterRepository
 
             existing.Name = shelter.Name.Trim();
             existing.Location = shelter.Location.Trim();
+            existing.District = shelter.District.Trim();
+            existing.Type = shelter.Type.Trim();
+            existing.Manager = shelter.Manager.Trim();
             existing.Capacity = shelter.Capacity;
-            existing.Occupied = Math.Clamp(shelter.Occupied, 0, shelter.Capacity);
+            existing.CurrentOccupancy = Math.Clamp(shelter.CurrentOccupancy, 0, shelter.Capacity);
+            existing.Reserved = shelter.Reserved;
             existing.Services = shelter.Services.Select(s => s.Trim()).Distinct().ToList();
-            existing.Status = ComputeStatus(existing.Capacity, existing.Occupied);
-            existing.ContactPerson = shelter.ContactPerson?.Trim() ?? string.Empty;
+            existing.Status = ComputeStatus(existing.Capacity, existing.CurrentOccupancy);
             existing.ContactPhone = shelter.ContactPhone?.Trim() ?? string.Empty;
             existing.Notes = shelter.Notes?.Trim();
             existing.UpdatedAt = DateTimeOffset.UtcNow;
@@ -131,14 +174,17 @@ public class InMemoryShelterRepository : IShelterRepository
     {
         lock (_lock)
         {
-            var existing = _shelters.FirstOrDefault(s => s.Id == id);
+            var idStr = id.ToString();
+            var code = $"SH-{id:D3}";
+            var existing = _shelters.FirstOrDefault(s => s.Id == idStr || s.Id == code)
+                ?? _shelters.FirstOrDefault(s => int.TryParse(s.Id.Replace("SH-", ""), out var parsed) && parsed == id);
             if (existing == null)
             {
                 return Task.FromResult<Shelter?>(null);
             }
 
-            existing.Occupied = Math.Clamp(occupied, 0, existing.Capacity);
-            existing.Status = ComputeStatus(existing.Capacity, existing.Occupied);
+            existing.CurrentOccupancy = Math.Clamp(occupied, 0, existing.Capacity);
+            existing.Status = ComputeStatus(existing.Capacity, existing.CurrentOccupancy);
             existing.UpdatedAt = DateTimeOffset.UtcNow;
 
             return Task.FromResult<Shelter?>(CloneShelter(existing));
@@ -147,9 +193,20 @@ public class InMemoryShelterRepository : IShelterRepository
 
     public Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
+        return DeleteAsync(id.ToString(), cancellationToken);
+    }
+
+    public Task<bool> DeleteAsync(string id, CancellationToken cancellationToken = default)
+    {
         lock (_lock)
         {
-            var existing = _shelters.FirstOrDefault(s => s.Id == id);
+            var existing = _shelters.FirstOrDefault(s => s.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            if (existing == null && int.TryParse(id, out var intId))
+            {
+                var idStr = intId.ToString();
+                var code = $"SH-{intId:D3}";
+                existing = _shelters.FirstOrDefault(s => s.Id == idStr || s.Id == code);
+            }
             if (existing == null)
             {
                 return Task.FromResult(false);
@@ -165,12 +222,12 @@ public class InMemoryShelterRepository : IShelterRepository
         lock (_lock)
         {
             int totalCap = _shelters.Sum(s => s.Capacity);
-            int totalOcc = _shelters.Sum(s => s.Occupied);
+            int totalOcc = _shelters.Sum(s => s.CurrentOccupancy);
             int available = Math.Max(0, totalCap - totalOcc);
             int accepting = _shelters.Count(s => s.Remaining > 0);
             int nearCap = _shelters.Count(s => s.Status == "Near Capacity");
             int full = _shelters.Count(s => s.Status == "Full");
-            int operational = _shelters.Count(s => s.Status == "Operational");
+            int operational = _shelters.Count(s => s.Status == "Operational" || s.Status == "Active");
 
             var metrics = new ShelterMetrics
             {
@@ -198,6 +255,82 @@ public class InMemoryShelterRepository : IShelterRepository
         }
     }
 
+    public Task<(IEnumerable<Shelter> Items, int TotalCount)> GetPagedAsync(
+        ShelterQueryParameters parameters,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            var query = _shelters.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(parameters.Search))
+            {
+                var s = parameters.Search.Trim().ToLowerInvariant();
+                query = query.Where(item =>
+                    item.Name.ToLowerInvariant().Contains(s) ||
+                    item.Location.ToLowerInvariant().Contains(s) ||
+                    item.District.ToLowerInvariant().Contains(s) ||
+                    item.Manager.ToLowerInvariant().Contains(s) ||
+                    item.Id.ToLowerInvariant().Contains(s));
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameters.District) &&
+                !parameters.District.Equals("All districts", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(item => item.District.Equals(parameters.District.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                                            item.Location.Equals(parameters.District.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameters.Type) &&
+                !parameters.Type.Equals("All shelter types", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(item => item.Type.Equals(parameters.Type.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameters.Status) &&
+                !parameters.Status.Equals("All statuses", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(item => item.Status.Equals(parameters.Status.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (parameters.MinCapacity.HasValue)
+            {
+                query = query.Where(item => item.Capacity >= parameters.MinCapacity.Value);
+            }
+
+            if (parameters.MaxCapacity.HasValue)
+            {
+                query = query.Where(item => item.Capacity <= parameters.MaxCapacity.Value);
+            }
+
+            var list = query.ToList();
+            var totalCount = list.Count;
+            var page = parameters.Page.GetValueOrDefault(1) > 0 ? parameters.Page.GetValueOrDefault(1) : 1;
+            var pageSize = parameters.PageSize.GetValueOrDefault(10) > 0 ? parameters.PageSize.GetValueOrDefault(10) : 10;
+
+            var paged = list
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(CloneShelter)
+                .ToList();
+
+            return Task.FromResult(((IEnumerable<Shelter>)paged, totalCount));
+        }
+    }
+
+    public Task<(int Registered, int Operational, int NearCapacity, int Maintenance)> GetSummaryMetricsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            int reg = _shelters.Count;
+            int op = _shelters.Count(s => s.Status.Equals("Operational", StringComparison.OrdinalIgnoreCase) || s.Status.Equals("Active", StringComparison.OrdinalIgnoreCase));
+            int nc = _shelters.Count(s => s.Status.Equals("Near Capacity", StringComparison.OrdinalIgnoreCase));
+            int maint = _shelters.Count(s => s.Status.Equals("Maintenance", StringComparison.OrdinalIgnoreCase));
+            return Task.FromResult((reg, op, nc, maint));
+        }
+    }
+
     #region Helpers & Seed Data
 
     private static string ComputeStatus(int capacity, int occupied)
@@ -220,11 +353,14 @@ public class InMemoryShelterRepository : IShelterRepository
             Id = s.Id,
             Name = s.Name,
             Location = s.Location,
+            District = s.District,
+            Type = s.Type,
+            Manager = s.Manager,
             Capacity = s.Capacity,
-            Occupied = s.Occupied,
+            CurrentOccupancy = s.CurrentOccupancy,
+            Reserved = s.Reserved,
             Services = new List<string>(s.Services),
             Status = s.Status,
-            ContactPerson = s.ContactPerson,
             ContactPhone = s.ContactPhone,
             Notes = s.Notes,
             CreatedAt = s.CreatedAt,
@@ -238,92 +374,106 @@ public class InMemoryShelterRepository : IShelterRepository
         {
             new()
             {
-                Id = 1,
+                Id = "SH-001",
                 Name = "Riverton High School",
                 Location = "Central Ward",
+                District = "Central Ward",
+                Type = "Public School",
+                Manager = "Brenda Silva",
                 Capacity = 660,
-                Occupied = 612,
+                CurrentOccupancy = 612,
                 Services = new List<string> { "Accessible", "Medical" },
                 Status = "Near Capacity",
-                ContactPerson = "Brenda Silva",
                 ContactPhone = "+94 77 412 8041",
                 Notes = "Primary central ward emergency reception facility with wheelchair ramps and backup power."
             },
             new()
             {
-                Id = 2,
+                Id = "SH-002",
                 Name = "North Community Hall",
                 Location = "North Ward",
+                District = "North Ward",
+                Type = "Community Centre",
+                Manager = "Marcus Vance",
                 Capacity = 500,
-                Occupied = 284,
+                CurrentOccupancy = 284,
                 Services = new List<string> { "Accessible", "Food" },
                 Status = "Operational",
-                ContactPerson = "Marcus Vance",
                 ContactPhone = "+94 77 412 8022",
                 Notes = "Active hot meal kitchen on site. Direct access for transport vans."
             },
             new()
             {
-                Id = 3,
+                Id = "SH-003",
                 Name = "St. Mary's Civic Centre",
                 Location = "Eastbank",
+                District = "Eastbank",
+                Type = "Civic Centre",
+                Manager = "Sister Theresa",
                 Capacity = 450,
-                Occupied = 450,
+                CurrentOccupancy = 450,
                 Services = new List<string> { "Medical", "Childcare" },
                 Status = "Full",
-                ContactPerson = "Sister Theresa",
                 ContactPhone = "+94 77 412 8033",
                 Notes = "Currently at 100% capacity. Redirecting newly displaced families to North Community Hall."
             },
             new()
             {
-                Id = 4,
+                Id = "SH-004",
                 Name = "Lakeside Sports Hall",
                 Location = "West District",
+                District = "West District",
+                Type = "Sports Complex",
+                Manager = "David Perera",
                 Capacity = 400,
-                Occupied = 196,
+                CurrentOccupancy = 196,
                 Services = new List<string> { "Food", "Family rooms" },
                 Status = "Operational",
-                ContactPerson = "David Perera",
                 ContactPhone = "+94 77 412 8044",
                 Notes = "Equipped with family partitions, laundry, and clean shower blocks."
             },
             new()
             {
-                Id = 5,
+                Id = "SH-005",
                 Name = "Central Ward Stadium Pavilion",
                 Location = "Central Ward",
+                District = "Central Ward",
+                Type = "Sports Pavilion",
+                Manager = "Capt. Rohan Sen",
                 Capacity = 1200,
-                Occupied = 820,
+                CurrentOccupancy = 820,
                 Services = new List<string> { "Accessible", "Food", "Medical", "Family rooms" },
                 Status = "Operational",
-                ContactPerson = "Capt. Rohan Sen",
                 ContactPhone = "+94 77 412 8055",
                 Notes = "Main high-capacity staging dome equipped with field medical tent and triage."
             },
             new()
             {
-                Id = 6,
+                Id = "SH-006",
                 Name = "Eastbank Technical College",
                 Location = "Eastbank",
+                District = "Eastbank",
+                Type = "Vocational School",
+                Manager = "Kamal Jayasuriya",
                 Capacity = 350,
-                Occupied = 310,
+                CurrentOccupancy = 310,
                 Services = new List<string> { "Accessible", "Food" },
                 Status = "Near Capacity",
-                ContactPerson = "Kamal Jayasuriya",
                 ContactPhone = "+94 77 412 8066",
                 Notes = "High intake rate from Eastbank river overflow zone. Monitoring capacity closely."
             },
             new()
             {
-                Id = 7,
+                Id = "SH-007",
                 Name = "West District Community Shelter",
                 Location = "West District",
+                District = "West District",
+                Type = "Community Shelter",
+                Manager = "Nisha Weerasinghe",
                 Capacity = 300,
-                Occupied = 150,
+                CurrentOccupancy = 150,
                 Services = new List<string> { "Food", "Childcare" },
                 Status = "Operational",
-                ContactPerson = "Nisha Weerasinghe",
                 ContactPhone = "+94 77 412 8077",
                 Notes = "Dedicated mother-and-child support hub with pediatric supplies."
             }

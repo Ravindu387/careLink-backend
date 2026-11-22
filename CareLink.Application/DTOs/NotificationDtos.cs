@@ -59,17 +59,6 @@ public class NotificationMetricsDto
     public DateTimeOffset LastUpdated { get; set; }
 }
 
-public class NotificationQueryParameters
-{
-    public string? Search { get; set; }
-    public string? Category { get; set; }
-    public bool? UnreadOnly { get; set; }
-    public bool? UrgentOnly { get; set; }
-    public string? Role { get; set; }
-    public int Page { get; set; } = 1;
-    public int PageSize { get; set; } = 50;
-}
-
 public class PagedNotificationsDto
 {
     public IReadOnlyList<NotificationDto> Items { get; set; } = new List<NotificationDto>();
@@ -78,31 +67,6 @@ public class PagedNotificationsDto
     public int PageSize { get; set; }
     public int TotalPages { get; set; }
     public int UnreadCount { get; set; }
-}
-
-public class CreateNotificationDto
-{
-    [Required]
-    [StringLength(150)]
-    public string Title { get; set; } = string.Empty;
-
-    [Required]
-    [StringLength(300)]
-    public string Description { get; set; } = string.Empty;
-
-    [Required]
-    public string Category { get; set; } = "critical";
-
-    public bool? Urgent { get; set; }
-    public string? TargetRole { get; set; }
-
-    public string? Reference { get; set; }
-
-    [StringLength(1000)]
-    public string? Details { get; set; }
-
-    public string? ActionUrl { get; set; }
-    public string? ActionLabel { get; set; }
 }
 
 public class UpdateNotificationPreferencesDto

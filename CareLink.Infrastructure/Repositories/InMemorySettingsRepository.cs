@@ -585,4 +585,48 @@ public class InMemorySettingsRepository : ISettingsRepository
     }
 
     #endregion
+
+    #region Shelter Admin Settings
+
+    private UserSettings _userSettings = new()
+    {
+        Id = "default",
+        FullName = "Sanjana Amarasinghe",
+        Email = "sanjana@carelink.org",
+        Phone = "+94 77 321 8490",
+        Role = "Shelter Administrator",
+        ShelterName = "Riverton Central School",
+        ShelterLocation = "Central District",
+        ShelterCapacity = "660",
+        ShelterManager = "Sanjana Amarasinghe",
+        ShelterAddress = "Riverton, Greater Riverton",
+        TwoFactor = true,
+        LoginAlerts = true,
+        NotifInApp = true,
+        NotifEmail = true,
+        NotifSms = false,
+        NotifCritical = true,
+        NotifRequests = true,
+        NotifInventory = true,
+        NotifSystem = false,
+    };
+
+    public Task<UserSettings?> GetAsync()
+    {
+        lock (_lock)
+        {
+            return Task.FromResult<UserSettings?>(_userSettings);
+        }
+    }
+
+    public Task<UserSettings> UpsertAsync(UserSettings settings)
+    {
+        lock (_lock)
+        {
+            _userSettings = settings;
+            return Task.FromResult(_userSettings);
+        }
+    }
+
+    #endregion
 }

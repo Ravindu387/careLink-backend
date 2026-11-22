@@ -18,9 +18,9 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Configure Database Connection (SQL Server)
+// 1. Configure Database Connection (SQL Server for ASP.NET Core Identity)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+    ?? "Server=(localdb)\\mssqllocaldb;Database=CareLinkIdentityDb;Trusted_Connection=True;MultipleActiveResultSets=true";
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
@@ -39,8 +39,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddDefaultTokenProviders();
 
 // 3. Configure JWT Bearer Authentication
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("JWT Key is not configured.");
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "CareLinkSecureEmergencyKeyForDevEnvironment2026";
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "CareLinkAPI";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "CareLinkClient";
 
@@ -53,7 +52,7 @@ builder.Services.AddAuthentication(options =>
 .AddJwtBearer(options =>
 {
     options.SaveToken = true;
-    options.RequireHttpsMetadata = false; // Set to true in production
+    options.RequireHttpsMetadata = false;
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
@@ -100,7 +99,7 @@ builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHand
 
 // 4. Register Application & Infrastructure Clean Architecture layers
 builder.Services.AddApplicationServices();
-builder.Services.AddInfrastructureServices();
+builder.Services.AddInfrastructureServices(builder.Configuration);
 
 // Configure Email settings and additional admin infrastructure services
 builder.Services.Configure<EmailSettings>(
@@ -147,20 +146,35 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// 7. Seed Database and Initial Roles/Users on Startup
+// 7. Seed Database and Initial Records on Startup
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var logger = services.GetRequiredService<ILogger<Program>>();
+
+    // Seed Identity users and roles
     try
     {
-        logger.LogInformation("Starting database initialization and seeding...");
+        logger.LogInformation("Starting Identity database initialization and seeding...");
         await DbInitializer.SeedAsync(services);
-        logger.LogInformation("Database initialized and seeded successfully.");
+        logger.LogInformation("Identity database initialized and seeded successfully.");
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "An error occurred during database migration or seeding.");
+        logger.LogWarning(ex, "Could not seed ApplicationDbContext (Identity). Continuing startup.");
+    }
+
+    // Seed CareLinkDbContext operational entities
+    try
+    {
+        logger.LogInformation("Starting CareLinkDbContext data seeding...");
+        var careLinkDb = services.GetRequiredService<CareLinkDbContext>();
+        await DataSeeder.SeedAsync(careLinkDb);
+        logger.LogInformation("CareLinkDbContext seeded successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred during CareLinkDbContext seeding.");
     }
 }
 

@@ -1,5 +1,6 @@
 using CareLink.Application.DTOs;
 using CareLink.Application.Interfaces;
+using CareLink.Core.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CareLink.API.Controllers;
@@ -9,40 +10,71 @@ namespace CareLink.API.Controllers;
 [Route("api/shelter-overview")]
 public class SheltersController : ControllerBase
 {
-    private readonly IShelterService _service;
+    private readonly IShelterService _shelterService;
     private readonly ILogger<SheltersController> _logger;
 
-    public SheltersController(
-        IShelterService service,
-        ILogger<SheltersController> logger)
+    public SheltersController(IShelterService shelterService, ILogger<SheltersController> logger)
     {
-        _service = service;
+        _shelterService = shelterService;
         _logger = logger;
     }
 
     /// <summary>
     /// Retrieves all emergency shelters with optional filtering by search text, operational area, status, or availability.
+    /// Supports pagination when page parameter is provided.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ShelterDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<ShelterDto>>> GetAll(
+    public async Task<IActionResult> Get(
         [FromQuery] string? search,
         [FromQuery] string? area,
         [FromQuery] string? status,
         [FromQuery] string? availability,
         [FromQuery] string? service,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
         CancellationToken cancellationToken)
     {
-        var query = new ShelterQueryParameters
+        var parameters = new ShelterQueryParameters
         {
             Search = search,
             Area = area,
             Status = status,
             Availability = availability,
-            Service = service
+            Service = service,
+            Page = page,
+            PageSize = pageSize
         };
 
-        var shelters = await _service.GetAllAsync(query, cancellationToken);
+        if (parameters.Page.HasValue && parameters.Page.Value > 0)
+        {
+            var paged = await _shelterService.GetSheltersPagedAsync(parameters, cancellationToken);
+            return Ok(paged);
+        }
+
+        var shelters = await _shelterService.GetAllAsync(parameters, cancellationToken);
+        return Ok(shelters);
+    }
+
+    /// <summary>
+    /// Explicit paged endpoint for shelter management table.
+    /// </summary>
+    [HttpGet("paged")]
+    public async Task<ActionResult<PagedResultDto<ShelterDto>>> GetPaged(
+        [FromQuery] ShelterQueryParameters parameters,
+        CancellationToken cancellationToken)
+    {
+        var result = await _shelterService.GetSheltersPagedAsync(parameters, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Gets all shelters without pagination (useful for exports and lookups).
+    /// </summary>
+    [HttpGet("all")]
+    public async Task<ActionResult<IEnumerable<ShelterDto>>> GetAll(CancellationToken cancellationToken)
+    {
+        var shelters = await _shelterService.GetAllSheltersAsync(cancellationToken);
         return Ok(shelters);
     }
 
@@ -53,22 +85,37 @@ public class SheltersController : ControllerBase
     [ProducesResponseType(typeof(ShelterMetricsDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<ShelterMetricsDto>> GetMetrics(CancellationToken cancellationToken)
     {
-        var metrics = await _service.GetMetricsAsync(cancellationToken);
+        var metrics = await _shelterService.GetMetricsAsync(cancellationToken);
         return Ok(metrics);
     }
 
     /// <summary>
-    /// Retrieves a single shelter by its unique identifier.
+    /// Gets summary counts for shelter management KPI cards.
     /// </summary>
-    [HttpGet("{id:int}")]
-    [ProducesResponseType(typeof(ShelterDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ShelterDto>> GetById(int id, CancellationToken cancellationToken)
+    [HttpGet("summary")]
+    public async Task<ActionResult<ShelterSummaryDto>> GetSummary(CancellationToken cancellationToken)
     {
-        var shelter = await _service.GetByIdAsync(id, cancellationToken);
+        var summary = await _shelterService.GetSummaryAsync(cancellationToken);
+        return Ok(summary);
+    }
+
+    /// <summary>
+    /// Gets a single shelter by ID (supports string code e.g. "SH-001" or integer ID).
+    /// </summary>
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ShelterDto>> GetById(string id, CancellationToken cancellationToken)
+    {
+        ShelterDto? shelter = null;
+        if (int.TryParse(id, out var intId))
+        {
+            shelter = await _shelterService.GetByIdAsync(intId, cancellationToken);
+        }
+
+        shelter ??= await _shelterService.GetShelterByIdAsync(id, cancellationToken);
+
         if (shelter == null)
         {
-            return NotFound(new { message = $"Shelter '{id}' not found." });
+            return NotFound(new { message = $"Shelter with ID '{id}' was not found." });
         }
         return Ok(shelter);
     }
@@ -79,29 +126,35 @@ public class SheltersController : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(ShelterDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<ShelterDto>> Create(
-        [FromBody] CreateShelterDto dto,
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<ShelterDto>> Create([FromBody] CreateShelterDto dto, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
             return BadRequest(ModelState);
         }
 
-        var created = await _service.CreateAsync(dto, cancellationToken);
-        _logger.LogInformation("Shelter '{Name}' coordinated with ID {Id} in {Location}", created.Name, created.Id, created.Location);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        try
+        {
+            var created = await _shelterService.CreateAsync(dto, cancellationToken);
+            _logger.LogInformation("Shelter '{Name}' coordinated with ID {Id} in {Location}", created.Name, created.Id, created.Location);
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error registering shelter");
+            return StatusCode(500, new { message = "An error occurred while registering the shelter." });
+        }
     }
 
     /// <summary>
     /// Updates details, capacity, and services for an existing shelter.
     /// </summary>
-    [HttpPut("{id:int}")]
+    [HttpPut("{id}")]
     [ProducesResponseType(typeof(ShelterDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ShelterDto>> Update(
-        int id,
+        string id,
         [FromBody] UpdateShelterDto dto,
         CancellationToken cancellationToken)
     {
@@ -110,7 +163,8 @@ public class SheltersController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        var updated = await _service.UpdateAsync(id, dto, cancellationToken);
+        int intId = int.TryParse(id, out var parsed) ? parsed : 0;
+        var updated = await _shelterService.UpdateAsync(intId, dto, cancellationToken);
         if (updated == null)
         {
             return NotFound(new { message = $"Shelter '{id}' not found." });
@@ -137,7 +191,7 @@ public class SheltersController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        var updated = await _service.UpdateOccupancyAsync(id, dto.Occupied, cancellationToken);
+        var updated = await _shelterService.UpdateOccupancyAsync(id, dto.Occupied, cancellationToken);
         if (updated == null)
         {
             return NotFound(new { message = $"Shelter '{id}' not found." });
@@ -150,12 +204,23 @@ public class SheltersController : ControllerBase
     /// <summary>
     /// Deletes or decommissions a shelter.
     /// </summary>
-    [HttpDelete("{id:int}")]
+    [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete(string id, CancellationToken cancellationToken)
     {
-        bool deleted = await _service.DeleteAsync(id, cancellationToken);
+        bool deleted;
+        if (int.TryParse(id, out var intId))
+        {
+            deleted = await _shelterService.DeleteAsync(intId, cancellationToken);
+        }
+        else
+        {
+            // fallback lookup by ID
+            var shelter = await _shelterService.GetShelterByIdAsync(id, cancellationToken);
+            deleted = shelter != null && await _shelterService.DeleteAsync(0, cancellationToken);
+        }
+
         if (!deleted)
         {
             return NotFound(new { message = $"Shelter '{id}' not found." });
@@ -172,7 +237,7 @@ public class SheltersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Reset(CancellationToken cancellationToken)
     {
-        await _service.ResetToDefaultAsync(cancellationToken);
+        await _shelterService.ResetToDefaultAsync(cancellationToken);
         _logger.LogInformation("Shelter overview data reset to defaults.");
         return Ok(new { message = "Shelter data reset to defaults." });
     }
