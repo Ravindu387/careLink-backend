@@ -13,10 +13,24 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     }
 
     public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<AiRecommendation> AiRecommendations => Set<AiRecommendation>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.Entity<AiRecommendation>(entity =>
+        {
+            entity.ToTable("AiRecommendations");
+            entity.HasKey(r => r.Id);
+            entity.Property(r => r.Category).HasMaxLength(100).IsRequired();
+            entity.Property(r => r.Title).HasMaxLength(250).IsRequired();
+            entity.Property(r => r.RecommendedPriority).HasMaxLength(50).IsRequired();
+            entity.Property(r => r.ReviewState).HasMaxLength(50).IsRequired();
+            entity.Property(r => r.ModelName).HasMaxLength(100);
+            entity.Property(r => r.CrisisId).HasMaxLength(50);
+            entity.Property(r => r.RequestId).HasMaxLength(50);
+        });
 
         // Rename Identity tables for clarity
         builder.Entity<ApplicationUser>(entity =>
