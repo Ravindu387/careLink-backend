@@ -160,7 +160,7 @@ public class InMemoryInventoryRepository : IInventoryRepository
             }
 
             item.OnHand = Math.Max(0, item.OnHand + delta);
-            item.Available = Math.Max(0, item.OnHand - item.Reserved);
+            item.Available = Math.Max(0, item.Available + delta);
             item.Status = item.Available <= 10 ? "Critical" : item.Available <= 100 ? "Low Stock" : "Healthy";
             item.UpdatedAt = DateTime.UtcNow;
 
