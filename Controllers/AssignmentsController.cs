@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using CareLink.Backend.Models;
 using CareLink.Backend.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CareLink.Backend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/assignments")]
 public class AssignmentsController : ControllerBase
 {
@@ -93,6 +95,10 @@ public class AssignmentsController : ControllerBase
 
             var created = await _assignmentsService.CreateAssignmentAsync(request);
             return Ok(ApiResponse<AssignmentItem>.Ok(created, "Assignment created successfully."));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<AssignmentItem>.Fail(ex.Message));
         }
         catch (Exception ex)
         {

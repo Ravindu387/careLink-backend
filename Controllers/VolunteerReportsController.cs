@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using CareLink.Backend.Models;
 using CareLink.Backend.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CareLink.Backend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/volunteer/reports")]
 [Route("api/volunteer-reports")]
 public class VolunteerReportsController : ControllerBase

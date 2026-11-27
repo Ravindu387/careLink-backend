@@ -1,11 +1,13 @@
-﻿using CareLink.Backend.Models;
+using CareLink.Backend.Models;
 using CareLink.Backend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CareLink.Backend.Controllers;
 
 [ApiController]
-[Route("api/notifications")]
+[Authorize]
+[Route("api/case-manager/notifications")]
 public class NotificationsController : ControllerBase
 {
     private readonly INotificationsService _notificationsService;
