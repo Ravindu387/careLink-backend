@@ -110,4 +110,13 @@ public class FakeGeminiService : IGeminiService
                 return Task.FromResult<T?>(default);
         }
     }
+
+    public Task<string> GenerateChatMessageAsync(
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage,
+        string? systemInstruction = null,
+        CancellationToken cancellationToken = default)
+    {
+        return GenerateContentAsync(userMessage, systemInstruction, cancellationToken);
+    }
 }
