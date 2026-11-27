@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -21,6 +21,18 @@
     <ProjectReference Include="..\CareLink.Core\CareLink.Core.csproj" />
     <ProjectReference Include="..\CareLink.Application\CareLink.Application.csproj" />
     <ProjectReference Include="..\CareLink.Infrastructure\CareLink.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.local.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Controllers\**\*.cs" LinkBase="CaseVolunteerControllers" />
+    <Compile Include="..\Services\**\*.cs" LinkBase="CaseVolunteerServices" />
+    <Compile Include="..\Models\**\*.cs" LinkBase="CaseVolunteerModels" />
   </ItemGroup>
 
 </Project>
