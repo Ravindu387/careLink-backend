@@ -93,6 +93,11 @@ public class OccupancyService : IOccupancyService
             throw new KeyNotFoundException($"Shelter '{dto.ShelterId}' not found.");
         }
 
+        if (dto.People <= 0)
+        {
+            throw new InvalidOperationException("Number of admitted people must be greater than zero.");
+        }
+
         var available = shelter.Capacity - shelter.CurrentOccupancy - shelter.Reserved;
         if (dto.People > available)
         {
