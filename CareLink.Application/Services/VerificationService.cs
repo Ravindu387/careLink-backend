@@ -2,22 +2,30 @@ using System.Collections.Concurrent;
 using System.Text;
 using CareLink.Application.Common;
 using CareLink.Application.DTOs.AuditLogs;
+using CareLink.Application.DTOs.Organizations;
 using CareLink.Application.DTOs.Users;
 using CareLink.Application.DTOs.Verification;
 using CareLink.Application.Interfaces;
+using CareLink.Core.Constants;
 using CareLink.Core.Entities;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CareLink.Application.Services;
 
 public class VerificationService : IVerificationService
 {
     private readonly ConcurrentDictionary<string, VerificationRequest> _requests = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<Guid, string> _orgToRequestId = new();
     private readonly IAuditLogService _auditLogService;
+    private readonly IServiceScopeFactory? _scopeFactory;
     private int _idSequence = 2050;
 
-    public VerificationService(IAuditLogService auditLogService)
+    public VerificationService(
+        IAuditLogService auditLogService,
+        IServiceScopeFactory? scopeFactory = null)
     {
         _auditLogService = auditLogService;
+        _scopeFactory = scopeFactory;
         InitializeDefaultRequests();
     }
 
@@ -32,154 +40,75 @@ public class VerificationService : IVerificationService
                 Id = "VER-2048",
                 Applicant = "Global Relief Network",
                 Type = "Partner Organisation",
-                Evidence = "Registration · Tax · Safeguarding",
+                Evidence = "Registration Certificate · Organisation Profile",
                 Priority = "High",
                 Status = "Pending Review",
                 SubmittedAt = now.AddHours(-2),
                 ApplicantEmail = "partnerships@globalrelief.org",
                 ApplicantPhone = "+94112345678",
                 OrganizationName = "Global Relief Network",
+                OrganizationType = "International NGO",
+                RegistrationCountry = "Sri Lanka",
+                RegistrationNumber = "INGO-2021-408",
+                YearEstablished = 2014,
+                Website = "https://globalrelief.org",
+                Address = "42 Horton Place, Colombo 07",
+                District = "Colombo",
+                Province = "Western Province",
+                Description = "Multi-district flood, landslide, and emergency shelter relief coordination.",
+                AreasOfOperation = "Colombo, Gampaha, Kalutara, Ratnapura",
+                AreasOfAssistance = "Food Distribution, Emergency Medical Assistance, Shelter and Accommodation, Water and Sanitation",
+                OperationalCapacity = "3 mobile medical teams, 4 regional relief warehouses, and 120 trained emergency responders.",
+                EmergencyResponseAvailability = "Available for emergency response",
+                AdditionalResources = "6 high-clearance relief trucks, 2 mobile water purification units",
+                RepresentativeFullName = "Amara Wijesinghe",
+                RepresentativeDesignation = "Country Director",
+                RepresentativeEmail = "amara.w@globalrelief.org",
+                RepresentativePhone = "+94771234567",
+                LoginEmail = "partnerships@globalrelief.org",
                 Documents =
                 [
-                    new() { Id = "DOC-101", Name = "Official Registration Certificate", Type = "PDF", Size = "2.4 MB", Status = "Verified", UploadedAt = now.AddHours(-2) },
-                    new() { Id = "DOC-102", Name = "Tax Compliance Declaration", Type = "PDF", Size = "1.1 MB", Status = "Ready", UploadedAt = now.AddHours(-2) },
-                    new() { Id = "DOC-103", Name = "Child Safeguarding & Protection Policy", Type = "PDF", Size = "3.8 MB", Status = "Ready", UploadedAt = now.AddHours(-2) }
-                ]
-            },
-            new()
-            {
-                Id = "VER-2044",
-                Applicant = "Sara Khan",
-                Type = "Partner Officer",
-                Evidence = "Identity · Employment Letter",
-                Priority = "High",
-                Status = "Pending Review",
-                SubmittedAt = now.AddHours(-5),
-                ApplicantEmail = "sara.khan@redcross.lk",
-                ApplicantPhone = "+94771234567",
-                OrganizationName = "Sri Lanka Red Cross Society",
-                Documents =
-                [
-                    new() { Id = "DOC-104", Name = "National Identity Card (NIC)", Type = "PDF", Size = "1.5 MB", Status = "Ready", UploadedAt = now.AddHours(-5) },
-                    new() { Id = "DOC-105", Name = "Official Employment & Authorization Letter", Type = "PDF", Size = "840 KB", Status = "Ready", UploadedAt = now.AddHours(-5) }
+                    new() { Id = "DOC-101", Category = "RegistrationCertificate", Name = "Organisation / NGO Registration Certificate", OriginalFileName = "GRN_NGO_Certificate_2026.pdf", Type = "PDF", Size = "2.4 MB", Status = "Uploaded", UploadedAt = now.AddHours(-2) },
+                    new() { Id = "DOC-102", Category = "OrganisationProfile", Name = "Organisation Profile / Constitution", OriginalFileName = "GRN_Constitution_Profile.pdf", Type = "PDF", Size = "1.1 MB", Status = "Uploaded", UploadedAt = now.AddHours(-2) },
+                    new() { Id = "DOC-103", Category = "AuthorisationLetter", Name = "Authorisation Letter for Representative", OriginalFileName = "GRN_Director_Authorisation.pdf", Type = "PDF", Size = "890 KB", Status = "Uploaded", UploadedAt = now.AddHours(-2) }
                 ]
             },
             new()
             {
                 Id = "VER-2039",
                 Applicant = "Riverton Medical Collective",
-                Type = "Medical Partner",
-                Evidence = "Registration · Medical Licence",
+                Type = "Partner Organisation",
+                Evidence = "Registration Certificate · Authorisation Letter",
                 Priority = "Standard",
                 Status = "Additional Info",
                 SubmittedAt = now.AddDays(-1).AddHours(-2),
                 ApplicantEmail = "contact@rivertonmedical.org",
                 ApplicantPhone = "+94114567890",
                 OrganizationName = "Riverton Medical Collective",
-                DecisionRationale = "Medical license document was partially blurred. Requested renewed certified copy.",
-                ReviewedBy = "Alex Kimani",
+                OrganizationType = "Charity / Non-profit Organisation",
+                RegistrationCountry = "Sri Lanka",
+                RegistrationNumber = "MED-NP-2023-19",
+                Address = "18 Hospital Road, Kalutara",
+                District = "Kalutara",
+                Province = "Western Province",
+                Description = "Emergency trauma and mobile clinic deployment for flood-affected families.",
+                AreasOfOperation = "Kalutara, Galle",
+                AreasOfAssistance = "Emergency Medical Assistance, Child Protection",
+                OperationalCapacity = "25 volunteer doctors and paramedics with portable triage kits.",
+                EmergencyResponseAvailability = "Limited availability",
+                RepresentativeFullName = "Dr. Ruwan Jayawardena",
+                RepresentativeDesignation = "Chief Medical Coordinator",
+                RepresentativeEmail = "ruwan@rivertonmedical.org",
+                RepresentativePhone = "+94714567890",
+                LoginEmail = "contact@rivertonmedical.org",
+                AdditionalInfoRequest = "Registration certificate scan was partially cropped. Please upload a clear full-page copy.",
+                DecisionRationale = "Registration certificate scan was partially cropped. Please upload a clear full-page copy.",
+                ReviewedBy = "System Administrator",
                 ReviewedAt = now.AddHours(-4),
                 Documents =
                 [
-                    new() { Id = "DOC-106", Name = "Hospital Clinical Registration", Type = "PDF", Size = "3.2 MB", Status = "Verified", UploadedAt = now.AddDays(-1) },
-                    new() { Id = "DOC-107", Name = "Practitioner Medical Council Licence", Type = "PDF", Size = "1.8 MB", Status = "Under Review", UploadedAt = now.AddDays(-1) }
-                ]
-            },
-            new()
-            {
-                Id = "VER-2031",
-                Applicant = "Abdul Rahman",
-                Type = "Resource Manager",
-                Evidence = "Identity · Appointment Letter",
-                Priority = "Standard",
-                Status = "Pending Review",
-                SubmittedAt = now.AddDays(-1).AddHours(-6),
-                ApplicantEmail = "abdul.rahman@dmc.gov.lk",
-                ApplicantPhone = "+94779876543",
-                OrganizationName = "National Disaster Management Centre",
-                Documents =
-                [
-                    new() { Id = "DOC-108", Name = "Government Issued NIC", Type = "PDF", Size = "1.2 MB", Status = "Ready", UploadedAt = now.AddDays(-1) },
-                    new() { Id = "DOC-109", Name = "Divisional Appointment Letter", Type = "PDF", Size = "920 KB", Status = "Ready", UploadedAt = now.AddDays(-1) }
-                ]
-            },
-            new()
-            {
-                Id = "VER-2027",
-                Applicant = "Community Response Alliance",
-                Type = "Partner Organisation",
-                Evidence = "Registration · Tax",
-                Priority = "High",
-                Status = "Pending Review",
-                SubmittedAt = now.AddDays(-2),
-                ApplicantEmail = "info@cra-relief.org",
-                ApplicantPhone = "+94117654321",
-                OrganizationName = "Community Response Alliance",
-                Documents =
-                [
-                    new() { Id = "DOC-110", Name = "NGO Secretariat Registration Certificate", Type = "PDF", Size = "2.8 MB", Status = "Ready", UploadedAt = now.AddDays(-2) },
-                    new() { Id = "DOC-111", Name = "Annual Tax Clearance Proof", Type = "PDF", Size = "1.4 MB", Status = "Ready", UploadedAt = now.AddDays(-2) }
-                ]
-            },
-            new()
-            {
-                Id = "VER-2022",
-                Applicant = "Daniel Perera",
-                Type = "Resource Manager",
-                Evidence = "Identity · Employment Letter",
-                Priority = "Standard",
-                Status = "Approved",
-                SubmittedAt = now.AddDays(-3),
-                ReviewedAt = now.AddHours(-1),
-                ReviewedBy = "System Administrator",
-                DecisionRationale = "All government employment credentials and NIC records verified successfully.",
-                ApplicantEmail = "daniel.perera@carelink.org",
-                ApplicantPhone = "+94774561234",
-                OrganizationName = "CareLink Logistics Network",
-                Documents =
-                [
-                    new() { Id = "DOC-112", Name = "Passport / NIC Scan", Type = "PDF", Size = "1.9 MB", Status = "Verified", UploadedAt = now.AddDays(-3) },
-                    new() { Id = "DOC-113", Name = "Verified Letter of Employment", Type = "PDF", Size = "780 KB", Status = "Verified", UploadedAt = now.AddDays(-3) }
-                ]
-            },
-            new()
-            {
-                Id = "VER-2018",
-                Applicant = "Emergency Logistics Unit",
-                Type = "Partner Organisation",
-                Evidence = "Registration · Tax · Safeguarding",
-                Priority = "High",
-                Status = "Pending Review",
-                SubmittedAt = now.AddDays(-4),
-                ApplicantEmail = "ops@emergencylogistics.lk",
-                ApplicantPhone = "+94118765432",
-                OrganizationName = "Emergency Logistics Unit",
-                Documents =
-                [
-                    new() { Id = "DOC-114", Name = "Corporate Registration Incorporation", Type = "PDF", Size = "2.2 MB", Status = "Ready", UploadedAt = now.AddDays(-4) },
-                    new() { Id = "DOC-115", Name = "Tax Compliance Docket", Type = "PDF", Size = "1.3 MB", Status = "Ready", UploadedAt = now.AddDays(-4) },
-                    new() { Id = "DOC-116", Name = "Aid Worker Code of Conduct", Type = "PDF", Size = "3.1 MB", Status = "Ready", UploadedAt = now.AddDays(-4) }
-                ]
-            },
-            new()
-            {
-                Id = "VER-2012",
-                Applicant = "Nadia Okafor",
-                Type = "Partner Officer",
-                Evidence = "Identity · Appointment Letter",
-                Priority = "Standard",
-                Status = "Rejected",
-                SubmittedAt = now.AddDays(-5),
-                ReviewedAt = now.AddDays(-4),
-                ReviewedBy = "Marta Silva",
-                DecisionRationale = "Unable to authenticate organizational affiliation. Phone and email domain verification failed.",
-                ApplicantEmail = "nadia.okafor@freemail.com",
-                ApplicantPhone = "+94776549870",
-                OrganizationName = "Independent Field Volunteer",
-                Documents =
-                [
-                    new() { Id = "DOC-117", Name = "Photocopy Identity Card", Type = "PDF", Size = "950 KB", Status = "Ready", UploadedAt = now.AddDays(-5) },
-                    new() { Id = "DOC-118", Name = "Unofficial Recommendation Note", Type = "PDF", Size = "420 KB", Status = "Ready", UploadedAt = now.AddDays(-5) }
+                    new() { Id = "DOC-106", Category = "RegistrationCertificate", Name = "Organisation / NGO Registration Certificate", OriginalFileName = "Riverton_Registration_Cert.pdf", Type = "PDF", Size = "3.2 MB", Status = "Uploaded", UploadedAt = now.AddDays(-1) },
+                    new() { Id = "DOC-107", Category = "AuthorisationLetter", Name = "Authorisation Letter for Representative", OriginalFileName = "Board_Authorisation_Letter.pdf", Type = "PDF", Size = "1.8 MB", Status = "Uploaded", UploadedAt = now.AddDays(-1) }
                 ]
             },
             new()
@@ -187,19 +116,35 @@ public class VerificationService : IVerificationService
                 Id = "VER-2007",
                 Applicant = "Highland Relief Volunteers",
                 Type = "Partner Organisation",
-                Evidence = "Registration · Volunteer Charter",
+                Evidence = "Registration Certificate",
                 Priority = "Standard",
                 Status = "Approved",
                 SubmittedAt = now.AddDays(-6),
                 ReviewedAt = now.AddHours(-2),
-                ReviewedBy = "Alex Kimani",
-                DecisionRationale = "Volunteer NGO registration confirmed with provincial secretary.",
+                ReviewedBy = "System Administrator",
+                DecisionRationale = "NGO registration confirmed with district secretariat.",
                 ApplicantEmail = "highland@volunteers.org",
                 ApplicantPhone = "+94812345678",
                 OrganizationName = "Highland Relief Volunteers",
+                OrganizationType = "Community-Based Organisation",
+                RegistrationCountry = "Sri Lanka",
+                RegistrationNumber = "CBO-KDY-2022-88",
+                Address = "105 Peradeniya Road, Kandy",
+                District = "Kandy",
+                Province = "Central Province",
+                Description = "Landslide early response and community evacuation support.",
+                AreasOfOperation = "Kandy, Nuwara Eliya, Matale",
+                AreasOfAssistance = "Search and Rescue, Shelter and Accommodation, Food Distribution",
+                OperationalCapacity = "85 community first responders trained in landslide evacuation.",
+                EmergencyResponseAvailability = "Available for emergency response",
+                RepresentativeFullName = "Kasun Bandara",
+                RepresentativeDesignation = "Operations Secretary",
+                RepresentativeEmail = "kasun@volunteers.org",
+                RepresentativePhone = "+94812345678",
+                LoginEmail = "highland@volunteers.org",
                 Documents =
                 [
-                    new() { Id = "DOC-119", Name = "Provincial Registration", Type = "PDF", Size = "1.6 MB", Status = "Verified", UploadedAt = now.AddDays(-6) }
+                    new() { Id = "DOC-119", Category = "RegistrationCertificate", Name = "Organisation / NGO Registration Certificate", OriginalFileName = "Highland_CBO_Certificate.pdf", Type = "PDF", Size = "1.6 MB", Status = "Uploaded", UploadedAt = now.AddDays(-6) }
                 ]
             }
         };
@@ -210,14 +155,243 @@ public class VerificationService : IVerificationService
         }
     }
 
-    public Task<ApiResponse<PaginatedListDto<VerificationRequestDto>>> GetRequestsAsync(VerificationQueryDto query)
+    public async Task<VerificationRequestDto> RegisterPartnerOrganizationRequestAsync(
+        Organization organization,
+        ApplicationUser representative)
     {
+        var reqId = _orgToRequestId.GetOrAdd(
+            organization.Id,
+            _ => $"VER-{Interlocked.Increment(ref _idSequence)}");
+
+        var mapped = BuildRequestFromOrganization(reqId, organization, representative);
+        _requests[reqId] = mapped;
+
+        return await Task.FromResult(MapToDto(mapped));
+    }
+
+    private async Task SyncDatabaseOrganizationsAsync()
+    {
+        if (_scopeFactory == null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var orgService = scope.ServiceProvider.GetService<IOrganizationService>();
+            if (orgService == null)
+            {
+                return;
+            }
+
+            var orgsResponse = await orgService.GetOrganizationsAsync(new OrganizationQueryDto
+            {
+                PageNumber = 1,
+                PageSize = 100
+            });
+
+            if (orgsResponse.Success && orgsResponse.Data?.Items != null)
+            {
+                foreach (var orgDto in orgsResponse.Data.Items)
+                {
+                    // Skip the default seeded government organization if it has no partner representative application
+                    if (orgDto.Name == "National Disaster Management Centre" &&
+                        string.IsNullOrWhiteSpace(orgDto.RepresentativeEmail) &&
+                        orgDto.Documents.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    var reqId = _orgToRequestId.GetOrAdd(
+                        orgDto.Id,
+                        _ => $"VER-{Interlocked.Increment(ref _idSequence)}");
+
+                    var verStatus = MapApprovalStatusToVerificationStatus(orgDto.ApprovalStatus, orgDto.IsActive);
+
+                    var docs = orgDto.Documents.Select(d => new VerificationDocument
+                    {
+                        Id = d.Id.ToString(),
+                        DocumentId = d.Id,
+                        OrganizationId = orgDto.Id,
+                        Category = d.Category,
+                        Name = d.Label,
+                        OriginalFileName = d.OriginalFileName,
+                        Type = Path.GetExtension(d.OriginalFileName).TrimStart('.').ToUpperInvariant(),
+                        ContentType = d.ContentType,
+                        Size = d.FileSizeDisplay,
+                        FileSizeBytes = d.FileSizeBytes,
+                        Status = "Uploaded",
+                        CanDownload = true,
+                        UploadedAt = d.UploadedAt
+                    }).ToList();
+
+                    var evidenceSummary = docs.Count > 0
+                        ? string.Join(" · ", docs.Select(d => d.Name))
+                        : "Organisation Registration Application";
+
+                    var req = new VerificationRequest
+                    {
+                        Id = reqId,
+                        OrganizationId = orgDto.Id,
+                        UserId = orgDto.RepresentativeUserId,
+                        Applicant = orgDto.Name,
+                        Type = "Partner Organisation",
+                        Evidence = evidenceSummary,
+                        Priority = "High",
+                        Status = verStatus,
+                        SubmittedAt = orgDto.CreatedAt,
+                        ApplicantEmail = orgDto.ContactEmail ?? orgDto.RepresentativeEmail,
+                        ApplicantPhone = orgDto.ContactPhone ?? orgDto.RepresentativePhone,
+                        OrganizationName = orgDto.Name,
+                        OrganizationType = orgDto.Type,
+                        OtherOrganizationType = orgDto.OtherOrganizationType,
+                        RegistrationCountry = orgDto.RegistrationCountry,
+                        RegistrationNumber = orgDto.RegistrationNumber,
+                        YearEstablished = orgDto.YearEstablished,
+                        Website = orgDto.Website,
+                        SecondaryContactPhone = orgDto.SecondaryContactPhone,
+                        Address = orgDto.Address,
+                        District = orgDto.District,
+                        Province = orgDto.Province,
+                        Description = orgDto.Description,
+                        AreasOfOperation = string.Join(", ", orgDto.AreasOfOperation),
+                        AreasOfAssistance = string.Join(", ", orgDto.AreasOfAssistance),
+                        OtherAreaOfAssistance = orgDto.OtherAreaOfAssistance,
+                        OperationalCapacity = orgDto.OperationalCapacity,
+                        EmergencyResponseAvailability = orgDto.EmergencyResponseAvailability,
+                        AdditionalResources = orgDto.AdditionalResources,
+                        RepresentativeFullName = orgDto.RepresentativeFullName,
+                        RepresentativeDesignation = orgDto.RepresentativeDesignation,
+                        RepresentativeEmail = orgDto.RepresentativeEmail,
+                        RepresentativePhone = orgDto.RepresentativePhone,
+                        RepresentativeAlternativePhone = orgDto.RepresentativeAlternativePhone,
+                        LoginEmail = orgDto.RepresentativeEmail ?? orgDto.ContactEmail,
+                        AdditionalInfoRequest = orgDto.AdditionalInfoRequest,
+                        AdditionalInfoResponse = orgDto.AdditionalInfoResponse,
+                        ReviewedBy = orgDto.ReviewedBy,
+                        ReviewedAt = orgDto.ReviewedAt,
+                        DecisionRationale = orgDto.RejectionReason ?? orgDto.AdditionalInfoRequest,
+                        Documents = docs
+                    };
+
+                    _requests[reqId] = req;
+                }
+            }
+        }
+        catch
+        {
+            // Non-fatal fallback to in-memory dictionary
+        }
+    }
+
+    private static VerificationRequest BuildRequestFromOrganization(
+        string reqId,
+        Organization org,
+        ApplicationUser? representative)
+    {
+        var docs = (org.Documents ?? Array.Empty<OrganizationDocument>()).Select(d => new VerificationDocument
+        {
+            Id = d.Id.ToString(),
+            DocumentId = d.Id,
+            OrganizationId = org.Id,
+            Category = d.DocumentCategory,
+            Name = d.DocumentLabel,
+            OriginalFileName = d.OriginalFileName,
+            Type = Path.GetExtension(d.OriginalFileName).TrimStart('.').ToUpperInvariant(),
+            ContentType = d.ContentType,
+            Size = d.FileSizeDisplay,
+            FileSizeBytes = d.FileSizeBytes,
+            Status = "Uploaded",
+            CanDownload = true,
+            UploadedAt = d.UploadedAt
+        }).ToList();
+
+        var evidenceSummary = docs.Count > 0
+            ? string.Join(" · ", docs.Select(d => d.Name))
+            : "Organisation Registration Application";
+
+        return new VerificationRequest
+        {
+            Id = reqId,
+            OrganizationId = org.Id,
+            UserId = representative?.Id ?? org.RepresentativeUserId,
+            Applicant = org.Name,
+            Type = "Partner Organisation",
+            Evidence = evidenceSummary,
+            Priority = "High",
+            Status = MapApprovalStatusToVerificationStatus(org.ApprovalStatus, org.IsActive),
+            SubmittedAt = org.CreatedAt,
+            ApplicantEmail = org.ContactEmail ?? representative?.Email,
+            ApplicantPhone = org.ContactPhone ?? representative?.PhoneNumber,
+            OrganizationName = org.Name,
+            OrganizationType = org.Type,
+            OtherOrganizationType = org.OtherOrganizationType,
+            RegistrationCountry = org.RegistrationCountry,
+            RegistrationNumber = org.RegistrationNumber,
+            YearEstablished = org.YearEstablished,
+            Website = org.Website,
+            SecondaryContactPhone = org.SecondaryContactPhone,
+            Address = org.Address,
+            District = org.District,
+            Province = org.Province,
+            Description = org.Description,
+            AreasOfOperation = org.AreasOfOperation,
+            AreasOfAssistance = org.AreasOfAssistance,
+            OtherAreaOfAssistance = org.OtherAreaOfAssistance,
+            OperationalCapacity = org.OperationalCapacity,
+            EmergencyResponseAvailability = org.EmergencyResponseAvailability,
+            AdditionalResources = org.AdditionalResources,
+            RepresentativeFullName = org.RepresentativeFullName ?? representative?.FullName,
+            RepresentativeDesignation = org.RepresentativeDesignation ?? representative?.Designation,
+            RepresentativeEmail = org.RepresentativeEmail ?? representative?.Email,
+            RepresentativePhone = org.RepresentativePhone ?? representative?.PhoneNumber,
+            RepresentativeAlternativePhone = org.RepresentativeAlternativePhone ?? representative?.AlternativePhoneNumber,
+            LoginEmail = representative?.Email ?? org.RepresentativeEmail ?? org.ContactEmail,
+            AdditionalInfoRequest = org.AdditionalInfoRequest,
+            AdditionalInfoResponse = org.AdditionalInfoResponse,
+            ReviewedBy = org.ReviewedBy,
+            ReviewedAt = org.ReviewedAt,
+            DecisionRationale = org.RejectionReason ?? org.AdditionalInfoRequest,
+            Documents = docs
+        };
+    }
+
+    private static string MapApprovalStatusToVerificationStatus(string? approvalStatus, bool isActive)
+    {
+        if (string.Equals(approvalStatus, AccountStatuses.PendingApproval, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Pending Review";
+        }
+
+        if (string.Equals(approvalStatus, AccountStatuses.AdditionalInfoRequested, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Additional Info";
+        }
+
+        if (string.Equals(approvalStatus, AccountStatuses.Rejected, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Rejected";
+        }
+
+        if (isActive || string.Equals(approvalStatus, AccountStatuses.Active, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Approved";
+        }
+
+        return "Pending Review";
+    }
+
+    public async Task<ApiResponse<PaginatedListDto<VerificationRequestDto>>> GetRequestsAsync(VerificationQueryDto query)
+    {
+        await SyncDatabaseOrganizationsAsync();
+
         var items = FilterRequests(query);
         var ordered = items.OrderByDescending(r => r.SubmittedAt).ToList();
 
         var totalCount = ordered.Count;
         var page = query.PageNumber > 0 ? query.PageNumber : 1;
-        var pageSize = query.PageSize > 0 ? query.PageSize : 10;
+        var pageSize = query.PageSize > 0 ? query.PageSize : 20;
 
         var pagedItems = ordered
             .Skip((page - 1) * pageSize)
@@ -233,21 +407,25 @@ public class VerificationService : IVerificationService
             PageSize = pageSize
         };
 
-        return Task.FromResult(ApiResponse<PaginatedListDto<VerificationRequestDto>>.SuccessResult(result));
+        return ApiResponse<PaginatedListDto<VerificationRequestDto>>.SuccessResult(result);
     }
 
-    public Task<ApiResponse<VerificationRequestDto>> GetRequestByIdAsync(string id)
+    public async Task<ApiResponse<VerificationRequestDto>> GetRequestByIdAsync(string id)
     {
+        await SyncDatabaseOrganizationsAsync();
+
         if (_requests.TryGetValue(id, out var req))
         {
-            return Task.FromResult(ApiResponse<VerificationRequestDto>.SuccessResult(MapToDto(req)));
+            return ApiResponse<VerificationRequestDto>.SuccessResult(MapToDto(req));
         }
 
-        return Task.FromResult(ApiResponse<VerificationRequestDto>.FailureResult($"Verification request '{id}' not found."));
+        return ApiResponse<VerificationRequestDto>.FailureResult($"Verification request '{id}' not found.");
     }
 
-    public Task<ApiResponse<VerificationStatsDto>> GetStatsAsync()
+    public async Task<ApiResponse<VerificationStatsDto>> GetStatsAsync()
     {
+        await SyncDatabaseOrganizationsAsync();
+
         var all = _requests.Values.ToList();
         var now = DateTime.UtcNow;
         var today = now.Date;
@@ -277,7 +455,7 @@ public class VerificationService : IVerificationService
             }
             else
             {
-                oldestPendingText = $"Oldest unresolved request was submitted {(int)diff.TotalHours} hours ago.";
+                oldestPendingText = $"Oldest unresolved request was submitted {Math.Max(1, (int)diff.TotalHours)} hours ago.";
             }
         }
 
@@ -294,18 +472,20 @@ public class VerificationService : IVerificationService
             TotalRequests = all.Count
         };
 
-        return Task.FromResult(ApiResponse<VerificationStatsDto>.SuccessResult(stats));
+        return ApiResponse<VerificationStatsDto>.SuccessResult(stats);
     }
 
-    public Task<ApiResponse<IReadOnlyList<string>>> GetRequestTypesAsync()
+    public async Task<ApiResponse<IReadOnlyList<string>>> GetRequestTypesAsync()
     {
+        await SyncDatabaseOrganizationsAsync();
+
         var types = _requests.Values
             .Select(r => r.Type)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(t => t)
             .ToList();
 
-        return Task.FromResult(ApiResponse<IReadOnlyList<string>>.SuccessResult(types));
+        return ApiResponse<IReadOnlyList<string>>.SuccessResult(types);
     }
 
     public Task<ApiResponse<VerificationRequestDto>> CreateRequestAsync(CreateVerificationRequestDto request)
@@ -321,9 +501,10 @@ public class VerificationService : IVerificationService
                 {
                     Id = $"DOC-{nextId}-{i + 1}",
                     Name = request.DocumentNames[i].Trim(),
+                    OriginalFileName = request.DocumentNames[i].Trim(),
                     Type = "PDF",
                     Size = "1.5 MB",
-                    Status = "Ready",
+                    Status = "Uploaded",
                     UploadedAt = DateTime.UtcNow
                 });
             }
@@ -334,9 +515,10 @@ public class VerificationService : IVerificationService
             {
                 Id = $"DOC-{nextId}-1",
                 Name = "Identity Verification Document",
+                OriginalFileName = "Identity_Document.pdf",
                 Type = "PDF",
                 Size = "1.2 MB",
-                Status = "Ready",
+                Status = "Uploaded",
                 UploadedAt = DateTime.UtcNow
             });
         }
@@ -364,67 +546,137 @@ public class VerificationService : IVerificationService
             MapToDto(newReq), "Verification request submitted successfully."));
     }
 
-    public async Task<ApiResponse<VerificationRequestDto>> RecordDecisionAsync(string id, VerificationDecisionRequestDto request, string actor)
+    public async Task<ApiResponse<VerificationRequestDto>> RecordDecisionAsync(
+        string id,
+        VerificationDecisionRequestDto request,
+        string actor)
     {
+        await SyncDatabaseOrganizationsAsync();
+
         if (!_requests.TryGetValue(id, out var req))
         {
             return ApiResponse<VerificationRequestDto>.FailureResult($"Verification request '{id}' not found.");
         }
 
+        var rawStatus = request.ResolvedStatus;
+        var normalizedStatus = NormalizeVerificationStatus(rawStatus);
         var previousStatus = req.Status;
-        req.Status = request.Status.Trim();
-        req.DecisionRationale = request.Rationale.Trim();
-        req.ReviewedBy = string.IsNullOrWhiteSpace(actor) ? "System Administrator" : actor;
+        var reviewer = string.IsNullOrWhiteSpace(actor) ? "System Administrator" : actor;
+        var rationale = request.ResolvedRationale;
+
+        if (string.IsNullOrWhiteSpace(rationale))
+        {
+            return ApiResponse<VerificationRequestDto>.FailureResult("Please provide a decision rationale before continuing.");
+        }
+
+        var emailSent = false;
+
+        // If backed by a database Partner Organization, synchronize decision with OrganizationService
+        if (req.OrganizationId.HasValue && _scopeFactory != null)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var orgService = scope.ServiceProvider.GetService<IOrganizationService>();
+            if (orgService != null)
+            {
+                var decisionCode = normalizedStatus switch
+                {
+                    "Approved" => "Approve",
+                    "Rejected" => "Reject",
+                    "Additional Info" => "RequestInfo",
+                    _ => "Approve"
+                };
+
+                var reviewResult = await orgService.ReviewOrganizationAsync(
+                    req.OrganizationId.Value,
+                    new OrganizationReviewDecisionRequestDto
+                    {
+                        Decision = decisionCode,
+                        Rationale = rationale
+                    },
+                    reviewer);
+
+                if (!reviewResult.Success)
+                {
+                    return ApiResponse<VerificationRequestDto>.FailureResult(reviewResult.Message);
+                }
+
+                emailSent = reviewResult.Data?.EmailSent ?? false;
+            }
+        }
+        else
+        {
+            try
+            {
+                var actionName = normalizedStatus switch
+                {
+                    "Approved" => "Verification approved",
+                    "Rejected" => "Verification rejected",
+                    "Additional Info" => "Verification additional info requested",
+                    _ => $"Verification status set to {normalizedStatus}"
+                };
+
+                await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
+                {
+                    Action = actionName,
+                    Actor = reviewer,
+                    Record = req.Id,
+                    Change = $"{previousStatus} → {normalizedStatus}",
+                    Rationale = rationale,
+                    Type = req.Type.Contains("Organisation", StringComparison.OrdinalIgnoreCase) ? "Organisation" : "User",
+                    Environment = "Production"
+                });
+            }
+            catch
+            {
+                // Non-fatal
+            }
+        }
+
+        req.Status = normalizedStatus;
+        req.DecisionRationale = rationale;
+        if (normalizedStatus == "Additional Info")
+        {
+            req.AdditionalInfoRequest = rationale;
+        }
+        req.ReviewedBy = reviewer;
         req.ReviewedAt = DateTime.UtcNow;
 
-        if (req.Status.Equals("Approved", StringComparison.OrdinalIgnoreCase))
-        {
-            foreach (var doc in req.Documents)
-            {
-                doc.Status = "Verified";
-            }
-        }
-        else if (req.Status.Equals("Additional Info", StringComparison.OrdinalIgnoreCase))
-        {
-            foreach (var doc in req.Documents)
-            {
-                if (doc.Status != "Verified") doc.Status = "Under Review";
-            }
-        }
-
-        // Write an immutable entry into AuditLog
-        try
-        {
-            var actionName = req.Status switch
-            {
-                "Approved" => "Verification approved",
-                "Rejected" => "Verification rejected",
-                "Additional Info" => "Verification additional info requested",
-                _ => $"Verification status set to {req.Status}"
-            };
-
-            await _auditLogService.CreateAuditLogAsync(new CreateAuditLogRequestDto
-            {
-                Action = actionName,
-                Actor = req.ReviewedBy,
-                Record = req.Id,
-                Change = $"{previousStatus} → {req.Status}",
-                Rationale = req.DecisionRationale,
-                Type = req.Type.Contains("Organisation", StringComparison.OrdinalIgnoreCase) ? "Organisation" : "User",
-                Environment = "Production"
-            });
-        }
-        catch
-        {
-            // Logging failure should not disrupt the transaction
-        }
+        var dto = MapToDto(req);
+        dto.EmailSent = emailSent;
 
         return ApiResponse<VerificationRequestDto>.SuccessResult(
-            MapToDto(req), $"Verification decision '{req.Status}' recorded successfully for request {req.Id}.");
+            dto,
+            $"Verification decision '{normalizedStatus}' recorded successfully for request {req.Id}.");
     }
 
-    public Task<byte[]> ExportCsvAsync(VerificationQueryDto query)
+    private static string NormalizeVerificationStatus(string status)
     {
+        if (status.Equals("Approve", StringComparison.OrdinalIgnoreCase) ||
+            status.Equals("Approved", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Approved";
+        }
+
+        if (status.Equals("Reject", StringComparison.OrdinalIgnoreCase) ||
+            status.Equals("Rejected", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Rejected";
+        }
+
+        if (status.Equals("RequestInfo", StringComparison.OrdinalIgnoreCase) ||
+            status.Equals("Additional Info", StringComparison.OrdinalIgnoreCase) ||
+            status.Equals("AdditionalInfoRequested", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Additional Info";
+        }
+
+        return status;
+    }
+
+    public async Task<byte[]> ExportCsvAsync(VerificationQueryDto query)
+    {
+        await SyncDatabaseOrganizationsAsync();
+
         var items = FilterRequests(query).OrderByDescending(r => r.SubmittedAt).ToList();
 
         var sb = new StringBuilder();
@@ -446,7 +698,7 @@ public class VerificationService : IVerificationService
             sb.AppendLine(row);
         }
 
-        return Task.FromResult(Encoding.UTF8.GetBytes(sb.ToString()));
+        return Encoding.UTF8.GetBytes(sb.ToString());
     }
 
     private IEnumerable<VerificationRequest> FilterRequests(VerificationQueryDto query)
@@ -461,7 +713,9 @@ public class VerificationService : IVerificationService
                 r.Applicant.ToLowerInvariant().Contains(q) ||
                 r.Type.ToLowerInvariant().Contains(q) ||
                 r.Evidence.ToLowerInvariant().Contains(q) ||
-                (r.OrganizationName != null && r.OrganizationName.ToLowerInvariant().Contains(q)));
+                (r.OrganizationName != null && r.OrganizationName.ToLowerInvariant().Contains(q)) ||
+                (r.RepresentativeFullName != null && r.RepresentativeFullName.ToLowerInvariant().Contains(q)) ||
+                (r.ApplicantEmail != null && r.ApplicantEmail.ToLowerInvariant().Contains(q)));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Type) &&
@@ -516,6 +770,8 @@ public class VerificationService : IVerificationService
         return new VerificationRequestDto
         {
             Id = r.Id,
+            OrganizationId = r.OrganizationId,
+            UserId = r.UserId,
             Applicant = r.Applicant,
             Type = r.Type,
             Evidence = r.Evidence,
@@ -526,19 +782,64 @@ public class VerificationService : IVerificationService
             ApplicantEmail = r.ApplicantEmail,
             ApplicantPhone = r.ApplicantPhone,
             OrganizationName = r.OrganizationName,
+            OrganizationType = r.OrganizationType,
+            OtherOrganizationType = r.OtherOrganizationType,
+            RegistrationCountry = r.RegistrationCountry,
+            RegistrationNumber = r.RegistrationNumber,
+            YearEstablished = r.YearEstablished,
+            Website = r.Website,
+            SecondaryContactPhone = r.SecondaryContactPhone,
+            Address = r.Address,
+            District = r.District,
+            Province = r.Province,
+            Description = r.Description,
+            AreasOfOperation = SplitCsvList(r.AreasOfOperation),
+            AreasOfAssistance = SplitCsvList(r.AreasOfAssistance),
+            OtherAreaOfAssistance = r.OtherAreaOfAssistance,
+            OperationalCapacity = r.OperationalCapacity,
+            EmergencyResponseAvailability = r.EmergencyResponseAvailability,
+            AdditionalResources = r.AdditionalResources,
+            RepresentativeFullName = r.RepresentativeFullName,
+            RepresentativeDesignation = r.RepresentativeDesignation,
+            RepresentativeEmail = r.RepresentativeEmail,
+            RepresentativePhone = r.RepresentativePhone,
+            RepresentativeAlternativePhone = r.RepresentativeAlternativePhone,
+            LoginEmail = r.LoginEmail,
+            ApprovalStatus = r.Status,
+            AdditionalInfoRequest = r.AdditionalInfoRequest,
+            AdditionalInfoResponse = r.AdditionalInfoResponse,
             ReviewedBy = r.ReviewedBy,
             ReviewedAt = r.ReviewedAt,
             DecisionRationale = r.DecisionRationale,
             Documents = r.Documents.Select(d => new VerificationDocumentDto
             {
                 Id = d.Id,
+                DocumentId = d.DocumentId,
+                OrganizationId = d.OrganizationId,
+                Category = d.Category,
                 Name = d.Name,
+                OriginalFileName = string.IsNullOrWhiteSpace(d.OriginalFileName) ? d.Name : d.OriginalFileName,
                 Type = d.Type,
+                ContentType = d.ContentType,
                 Size = d.Size,
+                FileSizeBytes = d.FileSizeBytes,
                 Status = d.Status,
+                CanDownload = d.CanDownload,
                 UploadedAt = d.UploadedAt
             }).ToList()
         };
+    }
+
+    private static List<string> SplitCsvList(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return new List<string>();
+        }
+
+        return raw
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
     }
 
     private static string FormatSubmitted(DateTime dt)
