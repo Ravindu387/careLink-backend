@@ -11,8 +11,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/settings")]
-[Route("api/[controller]")]
 [Route("api/emergency-settings")]
 public class SettingsController : ControllerBase
 {
@@ -53,7 +53,9 @@ public class SettingsController : ControllerBase
         }
 
         if (string.Equals(type, "resourcemanager", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(type, "resource-manager", StringComparison.OrdinalIgnoreCase))
+            string.Equals(type, "resource-manager", StringComparison.OrdinalIgnoreCase) ||
+            User.IsInRole(UserRoles.ResourceManager) ||
+            User.IsInRole(UserRoles.LogisticsManager))
         {
             var rmSettings = await _settingsService.GetResourceManagerSettingsAsync();
             return Ok(rmSettings);

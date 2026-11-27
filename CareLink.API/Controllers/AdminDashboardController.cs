@@ -9,7 +9,7 @@ namespace CareLink.API.Controllers;
 
 [ApiController]
 [Route("api/admin/dashboard")]
-[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.IncidentManager},{UserRoles.PartnerOfficer},{UserRoles.VolunteerCoordinator}")]
+[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.CaseManager},{UserRoles.IncidentManager},{UserRoles.PartnerOfficer},{UserRoles.VolunteerCoordinator}")]
 public class AdminDashboardController : ControllerBase
 {
     private readonly IDashboardService _dashboardService;
