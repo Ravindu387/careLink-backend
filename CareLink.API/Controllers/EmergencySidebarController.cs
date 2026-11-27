@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using CareLink.Application.DTOs;
 using CareLink.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/emergency-sidebar")]
 [Route("api/sidebar")]
 public class EmergencySidebarController : ControllerBase

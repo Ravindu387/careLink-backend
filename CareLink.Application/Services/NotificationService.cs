@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using CareLink.Application.Common;
 using CareLink.Application.DTOs;
 using CareLink.Application.DTOs.AuditLogs;

@@ -1,3 +1,5 @@
+using System;
+
 namespace CareLink.Application.DTOs.AuditLogs;
 
 public class AuditLogQueryDto

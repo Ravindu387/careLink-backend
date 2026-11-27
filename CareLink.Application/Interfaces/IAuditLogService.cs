@@ -14,7 +14,7 @@ public interface IAuditLogService
     Task<ApiResponse<IReadOnlyList<string>>> GetActionTypesAsync();
     Task<ApiResponse<IReadOnlyList<string>>> GetRecordTypesAsync();
     Task<ApiResponse<IReadOnlyList<string>>> GetActorsAsync();
-    Task<ApiResponse<AuditLogDto>> CreateAuditLogAsync(CreateAuditLogRequestDto request);
+    Task<ApiResponse<AuditLogDto>> CreateAuditLogAsync(CreateAuditLogRequestDto request, CancellationToken cancellationToken = default);
     Task<(byte[] Bytes, AuditLogDto LogEntry)> ExportAuditLogAsync(ExportAuditLogRequestDto request, string actor);
 
     // Resource Manager Audit Logs (Oshadi)

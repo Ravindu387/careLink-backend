@@ -7,9 +7,11 @@ public class AssignmentsService : IAssignmentsService
 {
     private readonly List<AssignmentItem> _assignments = [];
     private readonly object _lock = new();
+    private readonly IVolunteerDirectoryService? _volunteerDirectoryService;
 
-    public AssignmentsService()
+    public AssignmentsService(IVolunteerDirectoryService? volunteerDirectoryService = null)
     {
+        _volunteerDirectoryService = volunteerDirectoryService;
         InitializeDemonstrationData();
     }
 
@@ -223,15 +225,47 @@ public class AssignmentsService : IAssignmentsService
         }
     }
 
-    public Task<AssignmentItem> CreateAssignmentAsync(CreateAssignmentRequest request)
+    public async Task<AssignmentItem> CreateAssignmentAsync(CreateAssignmentRequest request)
     {
+        var volunteerName = request.Volunteer.Trim();
+
+        if (volunteerName.Contains("Unavailable", StringComparison.OrdinalIgnoreCase) ||
+            volunteerName.Contains("Off Duty", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Cannot assign volunteer '{volunteerName}' because their current availability status is Unavailable.");
+        }
+
+        if (_volunteerDirectoryService != null)
+        {
+            var directory = await _volunteerDirectoryService.GetOverviewAsync(new VolunteerDirectoryQueryDto
+            {
+                PageNumber = 1,
+                PageSize = 500
+            });
+
+            var matchedVolunteer = directory.Volunteers.FirstOrDefault(v =>
+                v.Name.Equals(volunteerName, StringComparison.OrdinalIgnoreCase) ||
+                v.Id.Equals(volunteerName, StringComparison.OrdinalIgnoreCase));
+
+            if (matchedVolunteer != null)
+            {
+                if (matchedVolunteer.Availability.Equals("Unavailable", StringComparison.OrdinalIgnoreCase) ||
+                    matchedVolunteer.Availability.Equals("Off Duty", StringComparison.OrdinalIgnoreCase) ||
+                    matchedVolunteer.Availability.Equals("Suspended", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot assign volunteer '{matchedVolunteer.Name}' ({matchedVolunteer.Id}) because their current availability status is '{matchedVolunteer.Availability}'.");
+                }
+            }
+        }
+
         lock (_lock)
         {
             var randomSuffix = new Random().Next(4422, 4999);
             var assignment = new AssignmentItem
             {
                 Id = $"ASN-{randomSuffix}",
-                Volunteer = request.Volunteer.Trim(),
+                Volunteer = volunteerName,
                 Task = request.Task.Trim(),
                 Location = request.Location.Trim(),
                 Schedule = request.Schedule.Trim(),
@@ -242,7 +276,7 @@ public class AssignmentsService : IAssignmentsService
             };
 
             _assignments.Insert(0, assignment);
-            return Task.FromResult(assignment);
+            return assignment;
         }
     }
 

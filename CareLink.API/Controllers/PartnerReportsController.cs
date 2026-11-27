@@ -1,13 +1,14 @@
 using CareLink.Application.DTOs;
 using CareLink.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/partner-reports")]
 [Route("api/partner/reports")]
-[Route("api/reports")]
 public class PartnerReportsController : ControllerBase
 {
     private readonly IPartnerReportService _service;

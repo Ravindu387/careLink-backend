@@ -11,18 +11,29 @@ using AdminDtos = CareLink.Application.DTOs.AssistanceRequests;
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/assistance-requests")]
+[Route("api/assistancerequests")]
 public class AssistanceRequestsController : ControllerBase
 {
     private readonly IAssistanceRequestService _service;
+    private readonly ICitizenRequestService? _citizenRequestService;
+    private readonly CareLink.Backend.Services.IMyCasesService? _myCasesService;
+    private readonly CareLink.Backend.Services.ICaseManagementService? _caseManagementService;
     private readonly ILogger<AssistanceRequestsController> _logger;
 
     public AssistanceRequestsController(
         IAssistanceRequestService service,
-        ILogger<AssistanceRequestsController> logger)
+        ILogger<AssistanceRequestsController> logger,
+        ICitizenRequestService? citizenRequestService = null,
+        CareLink.Backend.Services.IMyCasesService? myCasesService = null,
+        CareLink.Backend.Services.ICaseManagementService? caseManagementService = null)
     {
         _service = service;
         _logger = logger;
+        _citizenRequestService = citizenRequestService;
+        _myCasesService = myCasesService;
+        _caseManagementService = caseManagementService;
     }
 
     /// <summary>
@@ -199,6 +210,24 @@ public class AssistanceRequestsController : ControllerBase
         if (updated == null)
         {
             return NotFound(new { error = $"Assistance request '{id}' was not found." });
+        }
+
+        if (_citizenRequestService != null)
+        {
+            await _citizenRequestService.UpdateStatusAsync(id, dto.Status);
+        }
+
+        if (_myCasesService != null)
+        {
+            await _myCasesService.UpdateStatusAsync(id, new CareLink.Backend.Models.UpdateMyCaseStatusRequest
+            {
+                Status = dto.Status
+            });
+        }
+
+        if (_caseManagementService != null)
+        {
+            await _caseManagementService.UpdateStatusAsync(id, dto.Status);
         }
 
         _logger.LogInformation("Assistance request {Id} status updated to {Status}", id, dto.Status);

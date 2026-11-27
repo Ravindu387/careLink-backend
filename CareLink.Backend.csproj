@@ -7,14 +7,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="CareLink.API\**;CareLink.Application\**;CareLink.Core\**;CareLink.Infrastructure\**" />
-    <Content Remove="CareLink.API\**;CareLink.Application\**;CareLink.Core\**;CareLink.Infrastructure\**" />
-    <EmbeddedResource Remove="CareLink.API\**;CareLink.Application\**;CareLink.Core\**;CareLink.Infrastructure\**" />
-    <None Remove="CareLink.API\**;CareLink.Application\**;CareLink.Core\**;CareLink.Infrastructure\**" />
+    <Compile Remove="CareLink.API\**;CareLink.Application\**;CareLink.Core\**;CareLink.Infrastructure\**;CareLink.Tests\**" />
+    <Content Remove="CareLink.API\**;CareLink.Application\**;CareLink.Core\**;CareLink.Infrastructure\**;CareLink.Tests\**" />
+    <EmbeddedResource Remove="CareLink.API\**;CareLink.Application\**;CareLink.Core\**;CareLink.Infrastructure\**;CareLink.Tests\**" />
+    <None Remove="CareLink.API\**;CareLink.Application\**;CareLink.Core\**;CareLink.Infrastructure\**;CareLink.Tests\**" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="CareLink.Application\CareLink.Application.csproj" />
+    <ProjectReference Include="CareLink.Core\CareLink.Core.csproj" />
   </ItemGroup>
 
 </Project>

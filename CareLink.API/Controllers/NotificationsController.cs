@@ -13,6 +13,7 @@ using AdminDtos = CareLink.Application.DTOs.Notifications;
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/notifications")]
 [Route("api/citizen/notifications")]
 public class NotificationsController : ControllerBase

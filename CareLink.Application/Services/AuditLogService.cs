@@ -121,7 +121,7 @@ public class AuditLogService : IAuditLogService
         return Task.FromResult(ApiResponse<IReadOnlyList<string>>.SuccessResult(list));
     }
 
-    public async Task<ApiResponse<AuditLogDto>> CreateAuditLogAsync(CreateAuditLogRequestDto request)
+    public async Task<ApiResponse<AuditLogDto>> CreateAuditLogAsync(CreateAuditLogRequestDto request, CancellationToken cancellationToken = default)
     {
         var nextId = $"AUD-{Interlocked.Increment(ref _idSequence)}";
         var entity = new AuditLog

@@ -45,7 +45,7 @@ public interface IAssistanceRequestService
     Task ResetDataAsync(
         CancellationToken cancellationToken = default);
 
-    // Administrative & Management Methods (dev)
+    // Administrative & Management Methods (dev / HEAD)
     Task<ApiResponse<PaginatedListDto<AdminDtos.AssistanceRequestDto>>> GetRequestsAsync(
         AdminDtos.AssistanceRequestQueryDto query);
 

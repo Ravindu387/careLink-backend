@@ -92,7 +92,20 @@ public class InMemoryCitizenRequestRepository : ICitizenRequestRepository
 
         if (!string.IsNullOrWhiteSpace(citizenName))
         {
-            query = query.Where(r => r.CitizenName.Equals(citizenName.Trim(), StringComparison.OrdinalIgnoreCase));
+            var trimmedName = citizenName.Trim();
+            if (trimmedName.Equals("Citizen User", StringComparison.OrdinalIgnoreCase) ||
+                trimmedName.Equals("Samira Khan", StringComparison.OrdinalIgnoreCase) ||
+                trimmedName.Equals("citizen@carelink.org", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(r =>
+                    r.CitizenName.Equals("Citizen User", StringComparison.OrdinalIgnoreCase) ||
+                    r.CitizenName.Equals("Samira Khan", StringComparison.OrdinalIgnoreCase) ||
+                    r.CitizenName.Equals("citizen@carelink.org", StringComparison.OrdinalIgnoreCase));
+            }
+            else
+            {
+                query = query.Where(r => r.CitizenName.Equals(trimmedName, StringComparison.OrdinalIgnoreCase));
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(status) && !status.Equals("all", StringComparison.OrdinalIgnoreCase))
@@ -181,7 +194,20 @@ public class InMemoryCitizenRequestRepository : ICitizenRequestRepository
         var query = _requests.Values.AsEnumerable();
         if (!string.IsNullOrWhiteSpace(citizenName))
         {
-            query = query.Where(r => r.CitizenName.Equals(citizenName.Trim(), StringComparison.OrdinalIgnoreCase));
+            var trimmedName = citizenName.Trim();
+            if (trimmedName.Equals("Citizen User", StringComparison.OrdinalIgnoreCase) ||
+                trimmedName.Equals("Samira Khan", StringComparison.OrdinalIgnoreCase) ||
+                trimmedName.Equals("citizen@carelink.org", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(r =>
+                    r.CitizenName.Equals("Citizen User", StringComparison.OrdinalIgnoreCase) ||
+                    r.CitizenName.Equals("Samira Khan", StringComparison.OrdinalIgnoreCase) ||
+                    r.CitizenName.Equals("citizen@carelink.org", StringComparison.OrdinalIgnoreCase));
+            }
+            else
+            {
+                query = query.Where(r => r.CitizenName.Equals(trimmedName, StringComparison.OrdinalIgnoreCase));
+            }
         }
 
         var list = query.ToList();

@@ -1,20 +1,35 @@
-﻿using CareLink.Backend.Models;
+using CareLink.Application.Interfaces;
+using CareLink.Backend.Models;
 using CareLink.Backend.Services;
+using CareLink.Core.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CareLink.Backend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/mycases")]
 public class MyCasesController : ControllerBase
 {
     private readonly IMyCasesService _myCasesService;
+    private readonly ICaseManagementService? _caseManagementService;
+    private readonly ICitizenRequestService? _citizenRequestService;
+    private readonly IAssistanceRequestRepository? _assistanceRequestRepository;
     private readonly ILogger<MyCasesController> _logger;
 
-    public MyCasesController(IMyCasesService myCasesService, ILogger<MyCasesController> logger)
+    public MyCasesController(
+        IMyCasesService myCasesService,
+        ILogger<MyCasesController> logger,
+        ICaseManagementService? caseManagementService = null,
+        ICitizenRequestService? citizenRequestService = null,
+        IAssistanceRequestRepository? assistanceRequestRepository = null)
     {
         _myCasesService = myCasesService;
         _logger = logger;
+        _caseManagementService = caseManagementService;
+        _citizenRequestService = citizenRequestService;
+        _assistanceRequestRepository = assistanceRequestRepository;
     }
 
     [HttpGet("stats")]
@@ -96,6 +111,27 @@ public class MyCasesController : ControllerBase
             {
                 return NotFound(ApiResponse<MyCaseItem>.Fail($"Case {id} not found."));
             }
+
+            if (_caseManagementService != null)
+            {
+                await _caseManagementService.UpdateStatusAsync(id, request.Status, request.Notes);
+            }
+
+            if (_citizenRequestService != null)
+            {
+                await _citizenRequestService.UpdateStatusAsync(id, request.Status);
+            }
+
+            if (_assistanceRequestRepository != null)
+            {
+                var existingReq = await _assistanceRequestRepository.GetByIdAsync(id);
+                if (existingReq != null)
+                {
+                    existingReq.Status = request.Status;
+                    await _assistanceRequestRepository.UpdateAsync(existingReq);
+                }
+            }
+
             return Ok(ApiResponse<MyCaseItem>.Ok(updated, $"Case {id} status updated to {request.Status}."));
         }
         catch (Exception ex)

@@ -369,7 +369,7 @@ public class AssistanceRequestService : IAssistanceRequestService
             CrisisEvent = string.IsNullOrWhiteSpace(request.CrisisName) ? "Monsoon Floods 2025" : request.CrisisName.Trim(),
             PriorityLevel = request.ReportedPriority ?? "High",
             Confidence = 88,
-            PriorityDisplay = $"{request.ReportedPriority ?? "High"} · 88%",
+            PriorityDisplay = $"{request.ReportedPriority ?? "High"} Â· 88%",
             Status = "Awaiting review",
             Verification = "Contact verified",
             Assigned = "Unassigned",
@@ -462,7 +462,7 @@ public class AssistanceRequestService : IAssistanceRequestService
         }
 
         existing.PriorityLevel = request.Priority;
-        existing.PriorityDisplay = $"{request.Priority} · {existing.Confidence}%";
+        existing.PriorityDisplay = $"{request.Priority} Â· {existing.Confidence}%";
         existing.UpdatedAt = DateTimeOffset.UtcNow;
 
         var updated = await _repository.UpdateAsync(existing);
@@ -575,7 +575,7 @@ public class AssistanceRequestService : IAssistanceRequestService
             CrisisEvent = entity.CrisisEvent,
             Reported = reported,
             Priority = string.IsNullOrEmpty(entity.PriorityDisplay)
-                ? $"{entity.PriorityLevel} · {entity.Confidence}%"
+                ? $"{entity.PriorityLevel} Â· {entity.Confidence}%"
                 : entity.PriorityDisplay,
             PriorityLevel = entity.PriorityLevel,
             Confidence = entity.Confidence,

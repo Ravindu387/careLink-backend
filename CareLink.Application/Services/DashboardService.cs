@@ -8,6 +8,7 @@ namespace CareLink.Application.Services;
 public class DashboardService : IDashboardService
 {
     private readonly IUserService _userService;
+    private readonly IRoleService _roleService;
     private readonly IAssistanceRequestService _requestService;
     private readonly IOrganizationService _organizationService;
     private readonly IVerificationService _verificationService;
@@ -17,6 +18,7 @@ public class DashboardService : IDashboardService
 
     public DashboardService(
         IUserService userService,
+        IRoleService roleService,
         IAssistanceRequestService requestService,
         IOrganizationService organizationService,
         IVerificationService verificationService,
@@ -25,6 +27,7 @@ public class DashboardService : IDashboardService
         ILogger<DashboardService> logger)
     {
         _userService = userService;
+        _roleService = roleService;
         _requestService = requestService;
         _organizationService = organizationService;
         _verificationService = verificationService;
@@ -84,13 +87,23 @@ public class DashboardService : IDashboardService
         var oData = orgStats.Data;
         var vData = verStats.Data;
 
-        var roleDist = new List<RoleDistributionDto>
+        var roleStats = await _roleService.GetRolesAsync();
+        var roleDist = roleStats.Data?.Select(r => new RoleDistributionDto
         {
-            new() { Role = "EmergencyCoordinator", Count = 3 },
-            new() { Role = "PartnerOfficer", Count = 2 },
-            new() { Role = "Volunteer", Count = 1 },
-            new() { Role = "Citizen", Count = Math.Max(0, (uData?.TotalUsers ?? 7) - 6) }
-        };
+            Role = r.Name,
+            Count = r.UsersCount
+        }).ToList() ?? new List<RoleDistributionDto>();
+
+        if (roleDist.Count == 0)
+        {
+            roleDist = new List<RoleDistributionDto>
+            {
+                new() { Role = "EmergencyCoordinator", Count = 3 },
+                new() { Role = "PartnerOfficer", Count = 2 },
+                new() { Role = "Volunteer", Count = 1 },
+                new() { Role = "Citizen", Count = Math.Max(0, (uData?.TotalUsers ?? 7) - 6) }
+            };
+        }
 
         var summary = new DashboardSummaryDto
         {

@@ -136,6 +136,50 @@ public class OrganizationsController : ControllerBase
     }
 
     /// <summary>
+    /// Record an administrative verification decision (Approve, Reject, or RequestInfo) for a Partner Organisation.
+    /// </summary>
+    [HttpPost("{id:guid}/review")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin}")]
+    [ProducesResponseType(typeof(ApiResponse<OrganizationDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<OrganizationDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<OrganizationDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReviewOrganization(Guid id, [FromBody] OrganizationReviewDecisionRequestDto request)
+    {
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
+            return BadRequest(ApiResponse<OrganizationDto>.FailureResult("Validation failed.", errors));
+        }
+
+        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "System Administrator";
+        var result = await _organizationService.ReviewOrganizationAsync(id, request, actor);
+        if (!result.Success)
+        {
+            return result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                ? NotFound(result)
+                : BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Securely download or view a sensitive Partner Organisation verification document (Admin & authorized reviewers only).
+    /// </summary>
+    [HttpGet("{id:guid}/documents/{documentId:guid}/download")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator}")]
+    public async Task<IActionResult> DownloadDocument(Guid id, Guid documentId)
+    {
+        var doc = await _organizationService.GetDocumentForDownloadAsync(id, documentId);
+        if (doc == null)
+        {
+            return NotFound(ApiResponse<object>.FailureResult("Verification document not found."));
+        }
+
+        return File(doc.Value.Content, doc.Value.ContentType, doc.Value.FileName);
+    }
+
+    /// <summary>
     /// Delete an organization when safe and unassigned.
     /// </summary>
     [HttpDelete("{id:guid}")]

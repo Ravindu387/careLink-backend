@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>d67494ae-8e76-4d56-865c-56b0e66af492</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +21,18 @@
     <ProjectReference Include="..\CareLink.Core\CareLink.Core.csproj" />
     <ProjectReference Include="..\CareLink.Application\CareLink.Application.csproj" />
     <ProjectReference Include="..\CareLink.Infrastructure\CareLink.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.local.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Controllers\**\*.cs" LinkBase="CaseVolunteerControllers" />
+    <Compile Include="..\Services\**\*.cs" LinkBase="CaseVolunteerServices" />
+    <Compile Include="..\Models\**\*.cs" LinkBase="CaseVolunteerModels" />
   </ItemGroup>
 
 </Project>

@@ -540,17 +540,17 @@ public class SettingsService : ISettingsService
         };
     }
 
-    public async Task<SecuritySettingsDto> GetSecuritySettingsAsync()
+    public async Task<CareLink.Application.DTOs.SecuritySettingsDto> GetSecuritySettingsAsync()
     {
         var s = await GetOrCreateAsync();
-        return new SecuritySettingsDto
+        return new CareLink.Application.DTOs.SecuritySettingsDto
         {
             TwoFactor = s.TwoFactor,
             LoginAlerts = s.LoginAlerts,
         };
     }
 
-    public async Task<bool> UpdateSecuritySettingsAsync(SecuritySettingsDto dto)
+    public async Task<bool> UpdateSecuritySettingsAsync(CareLink.Application.DTOs.SecuritySettingsDto dto)
     {
         var s = await GetOrCreateAsync();
         s.TwoFactor = dto.TwoFactor;
@@ -749,17 +749,106 @@ public class SettingsService : ISettingsService
     }
 
     #endregion
-=======
+
+    #region Resource Manager Settings (Oshadi)
+
+    public async Task<ApiResponse<ResourceManagerSettingsDto>> GetResourceManagerSettingsAsync()
+    {
+        var settings = await _resourceManagerRepository.GetSettingsAsync();
+        return ApiResponse<ResourceManagerSettingsDto>.SuccessResponse(MapToDto(settings));
+    }
+
+    public async Task<ApiResponse<ResourceManagerSettingsDto>> UpdateSettingsAsync(UpdateSettingsRequest request)
+    {
+        var current = await _resourceManagerRepository.GetSettingsAsync();
+
+        if (request.Profile != null)
+        {
+            current.Profile = new ProfileSettings
+            {
+                FullName = request.Profile.FullName,
+                Email = request.Profile.Email,
+                Phone = request.Profile.Phone,
+                Warehouse = request.Profile.Warehouse
+            };
+        }
+
+        if (request.Inventory != null)
+        {
+            current.Inventory = new InventoryRulesSettings
+            {
+                LowStock = request.Inventory.LowStock,
+                CriticalStock = request.Inventory.CriticalStock,
+                ExpiryDays = request.Inventory.ExpiryDays,
+                AutoReorder = request.Inventory.AutoReorder,
+                TrackExpiry = request.Inventory.TrackExpiry,
+                AllowNegative = request.Inventory.AllowNegative
+            };
+        }
+
+        if (request.Dispatch != null)
+        {
+            current.Dispatch = new DispatchPreferencesSettings
+            {
+                DefaultVehicle = request.Dispatch.DefaultVehicle,
+                Approval = request.Dispatch.Approval,
+                Proof = request.Dispatch.Proof,
+                Tracking = request.Dispatch.Tracking,
+                DelayAlert = request.Dispatch.DelayAlert
+            };
+        }
+
+        if (request.Notifications != null)
+        {
+            current.Notifications = new NotificationPreferencesSettings
+            {
+                Email = request.Notifications.Email,
+                System = request.Notifications.System,
+                Critical = request.Notifications.Critical,
+                LowStock = request.Notifications.LowStock,
+                Dispatch = request.Notifications.Dispatch,
+                Weekly = request.Notifications.Weekly
+            };
+        }
+
+        if (request.Security != null)
+        {
+            current.Security = new SecuritySettings
+            {
+                TwoFactor = request.Security.TwoFactor,
+                SessionTimeout = request.Security.SessionTimeout,
+                LoginAlerts = request.Security.LoginAlerts
+            };
+        }
+
+        var updated = await _resourceManagerRepository.UpdateSettingsAsync(current);
+        return ApiResponse<ResourceManagerSettingsDto>.SuccessResponse(MapToDto(updated), "Settings updated successfully");
+    }
+
+    public async Task<ApiResponse<ResourceManagerSettingsDto>> ResetSettingsAsync()
+    {
+        var reset = await _resourceManagerRepository.ResetSettingsAsync();
+        return ApiResponse<ResourceManagerSettingsDto>.SuccessResponse(MapToDto(reset), "Settings reset to defaults");
+    }
+
+    public async Task<ApiResponse<ProfileSettingsDto>> UpdateProfileAsync(ProfileSettingsDto dto)
+    {
+        var current = await _resourceManagerRepository.GetSettingsAsync();
+        current.Profile = new ProfileSettings
+        {
+            FullName = dto.FullName,
+            Email = dto.Email,
+            Phone = dto.Phone,
             Warehouse = dto.Warehouse
         };
 
-        var updated = await _repository.UpdateSettingsAsync(current);
+        var updated = await _resourceManagerRepository.UpdateSettingsAsync(current);
         return ApiResponse<ProfileSettingsDto>.SuccessResponse(MapProfileToDto(updated.Profile), "Profile updated successfully");
     }
 
     public async Task<ApiResponse<InventoryRulesSettingsDto>> UpdateInventoryRulesAsync(InventoryRulesSettingsDto dto)
     {
-        var current = await _repository.GetSettingsAsync();
+        var current = await _resourceManagerRepository.GetSettingsAsync();
         current.Inventory = new InventoryRulesSettings
         {
             LowStock = dto.LowStock,
@@ -770,13 +859,13 @@ public class SettingsService : ISettingsService
             AllowNegative = dto.AllowNegative
         };
 
-        var updated = await _repository.UpdateSettingsAsync(current);
+        var updated = await _resourceManagerRepository.UpdateSettingsAsync(current);
         return ApiResponse<InventoryRulesSettingsDto>.SuccessResponse(MapInventoryToDto(updated.Inventory), "Inventory rules updated successfully");
     }
 
     public async Task<ApiResponse<DispatchPreferencesSettingsDto>> UpdateDispatchPreferencesAsync(DispatchPreferencesSettingsDto dto)
     {
-        var current = await _repository.GetSettingsAsync();
+        var current = await _resourceManagerRepository.GetSettingsAsync();
         current.Dispatch = new DispatchPreferencesSettings
         {
             DefaultVehicle = dto.DefaultVehicle,
@@ -786,13 +875,13 @@ public class SettingsService : ISettingsService
             DelayAlert = dto.DelayAlert
         };
 
-        var updated = await _repository.UpdateSettingsAsync(current);
+        var updated = await _resourceManagerRepository.UpdateSettingsAsync(current);
         return ApiResponse<DispatchPreferencesSettingsDto>.SuccessResponse(MapDispatchToDto(updated.Dispatch), "Dispatch preferences updated successfully");
     }
 
     public async Task<ApiResponse<NotificationPreferencesSettingsDto>> UpdateNotificationPreferencesAsync(NotificationPreferencesSettingsDto dto)
     {
-        var current = await _repository.GetSettingsAsync();
+        var current = await _resourceManagerRepository.GetSettingsAsync();
         current.Notifications = new NotificationPreferencesSettings
         {
             Email = dto.Email,
@@ -803,13 +892,13 @@ public class SettingsService : ISettingsService
             Weekly = dto.Weekly
         };
 
-        var updated = await _repository.UpdateSettingsAsync(current);
+        var updated = await _resourceManagerRepository.UpdateSettingsAsync(current);
         return ApiResponse<NotificationPreferencesSettingsDto>.SuccessResponse(MapNotificationsToDto(updated.Notifications), "Notification preferences updated successfully");
     }
 
-    public async Task<ApiResponse<SecuritySettingsDto>> UpdateSecuritySettingsAsync(SecuritySettingsDto dto)
+    public async Task<ApiResponse<CareLink.Application.DTOs.SecuritySettingsDto>> UpdateResourceManagerSecuritySettingsAsync(CareLink.Application.DTOs.SecuritySettingsDto dto)
     {
-        var current = await _repository.GetSettingsAsync();
+        var current = await _resourceManagerRepository.GetSettingsAsync();
         current.Security = new SecuritySettings
         {
             TwoFactor = dto.TwoFactor,
@@ -817,8 +906,13 @@ public class SettingsService : ISettingsService
             LoginAlerts = dto.LoginAlerts
         };
 
-        var updated = await _repository.UpdateSettingsAsync(current);
-        return ApiResponse<SecuritySettingsDto>.SuccessResponse(MapSecurityToDto(updated.Security), "Security settings updated successfully");
+        var updated = await _resourceManagerRepository.UpdateSettingsAsync(current);
+        return ApiResponse<CareLink.Application.DTOs.SecuritySettingsDto>.SuccessResponse(new CareLink.Application.DTOs.SecuritySettingsDto
+        {
+            TwoFactor = updated.Security.TwoFactor,
+            SessionTimeout = updated.Security.SessionTimeout,
+            LoginAlerts = updated.Security.LoginAlerts
+        }, "Security settings updated successfully");
     }
 
     private static ResourceManagerSettingsDto MapToDto(ResourceManagerSettings entity)
@@ -892,5 +986,6 @@ public class SettingsService : ISettingsService
             LoginAlerts = security.LoginAlerts
         };
     }
->>>>>>> Oshadi
+
+    #endregion
 }

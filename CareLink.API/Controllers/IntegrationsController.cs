@@ -9,7 +9,7 @@ namespace CareLink.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.IncidentManager},{UserRoles.VolunteerCoordinator}")]
+[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.CaseManager},{UserRoles.IncidentManager},{UserRoles.VolunteerCoordinator}")]
 public class IntegrationsController : ControllerBase
 {
     private readonly IIntegrationHealthService _integrationService;

@@ -36,8 +36,8 @@ public interface ISettingsService
     Task<ProfileDto> UpdateProfileAsync(ProfileDto dto);
     Task<ShelterSettingsDto> GetShelterSettingsAsync();
     Task<ShelterSettingsDto> UpdateShelterSettingsAsync(ShelterSettingsDto dto);
-    Task<CareLink.Application.DTOs.Settings.SecuritySettingsDto> GetSecuritySettingsAsync();
-    Task<bool> UpdateSecuritySettingsAsync(CareLink.Application.DTOs.Settings.SecuritySettingsDto dto);
+    Task<CareLink.Application.DTOs.SecuritySettingsDto> GetSecuritySettingsAsync();
+    Task<bool> UpdateSecuritySettingsAsync(CareLink.Application.DTOs.SecuritySettingsDto dto);
     Task<NotificationSettingsDto> GetNotificationSettingsAsync();
     Task<NotificationSettingsDto> UpdateNotificationSettingsAsync(NotificationSettingsDto dto);
 

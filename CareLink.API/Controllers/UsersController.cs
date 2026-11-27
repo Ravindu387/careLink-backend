@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using CareLink.API.Authorization;
 using CareLink.Application.Common;
 using CareLink.Application.DTOs.Roles;
@@ -15,10 +16,50 @@ namespace CareLink.API.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
+    private readonly IEmailService _emailService;
 
-    public UsersController(IUserService userService)
+    public UsersController(IUserService userService, IEmailService emailService)
     {
         _userService = userService;
+        _emailService = emailService;
+    }
+
+    /// <summary>
+    /// Retrieve safe Gmail SMTP configuration diagnostics (never exposes passwords or tokens).
+    /// Restricted to authorized Administrators.
+    /// </summary>
+    [HttpGet("smtp-diagnostics")]
+    [HasPermission(Permissions.Users.Create)]
+    [ProducesResponseType(typeof(ApiResponse<EmailDiagnosticsDto>), StatusCodes.Status200OK)]
+    public IActionResult GetSmtpDiagnostics()
+    {
+        var diagnostics = _emailService.GetDiagnostics();
+        return Ok(ApiResponse<EmailDiagnosticsDto>.SuccessResult(diagnostics, diagnostics.StatusSummary));
+    }
+
+    /// <summary>
+    /// Independently test Gmail SMTP connection, TLS negotiation, authentication, and email delivery without creating a user.
+    /// Restricted to authorized Administrators.
+    /// </summary>
+    [HttpPost("test-email")]
+    [HasPermission(Permissions.Users.Create)]
+    [ProducesResponseType(typeof(ApiResponse<EmailDeliveryResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<EmailDeliveryResult>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SendTestEmail([FromBody] TestEmailRequestDto request, CancellationToken cancellationToken)
+    {
+        var result = await _emailService.SendTestEmailAsync(request.RecipientEmail, cancellationToken);
+        if (!result.Success)
+        {
+            return BadRequest(new ApiResponse<EmailDeliveryResult>
+            {
+                Success = false,
+                Message = $"SMTP test email failed [{result.FailureCategory}]: {result.DiagnosticMessage}",
+                Data = result,
+                Errors = new List<string> { result.FailureCategory, result.DiagnosticMessage }
+            });
+        }
+
+        return Ok(ApiResponse<EmailDeliveryResult>.SuccessResult(result, result.DiagnosticMessage));
     }
 
     /// <summary>
@@ -34,7 +75,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieve user overview statistics (total, active, pending, disabled, privileged).
+    /// Retrieve user overview statistics (total, active, pending, pending setup, rejected, disabled, privileged).
     /// </summary>
     [HttpGet("stats")]
     [HasPermission(Permissions.Users.View)]
@@ -64,7 +105,8 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Create or invite a new user account with role and optional organization.
+    /// Create or invite a new user account with role and optional organization, sending an invitation email via SMTP.
+    /// Never exposes raw setup tokens or setup URLs in the response.
     /// </summary>
     [HttpPost]
     [HasPermission(Permissions.Users.Create)]
@@ -89,6 +131,69 @@ public class UsersController : ControllerBase
         }
 
         return StatusCode(StatusCodes.Status201Created, result);
+    }
+
+    /// <summary>
+    /// Regenerate a fresh single-use account setup token (invalidating previous tokens) and resend the invitation email.
+    /// </summary>
+    [HttpPost("{id}/resend-invitation")]
+    [HasPermission(Permissions.Users.Update)]
+    [ProducesResponseType(typeof(ApiResponse<UserDetailsDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UserDetailsDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<UserDetailsDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResendInvitation(string id)
+    {
+        var result = await _userService.ResendInvitationAsync(id);
+        if (!result.Success)
+        {
+            if (result.Message == "User not found.")
+                return NotFound(result);
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Approve a pending Partner Organization user account and dispatch approval email notification.
+    /// </summary>
+    [HttpPost("{id}/approve")]
+    [HasPermission(Permissions.Users.Update)]
+    [ProducesResponseType(typeof(ApiResponse<UserDetailsDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UserDetailsDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ApprovePartner(string id, [FromBody] ApprovePartnerRequestDto? request = null)
+    {
+        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "System Administrator";
+        var result = await _userService.ApprovePartnerAsync(id, request?.Notes, actor);
+        if (!result.Success)
+        {
+            if (result.Message == "User not found.")
+                return NotFound(result);
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Reject a pending Partner Organization user account, store rejection reason, and dispatch rejection email.
+    /// </summary>
+    [HttpPost("{id}/reject")]
+    [HasPermission(Permissions.Users.Update)]
+    [ProducesResponseType(typeof(ApiResponse<UserDetailsDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UserDetailsDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RejectPartner(string id, [FromBody] RejectPartnerRequestDto? request = null)
+    {
+        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "System Administrator";
+        var result = await _userService.RejectPartnerAsync(id, request?.Reason, actor);
+        if (!result.Success)
+        {
+            if (result.Message == "User not found.")
+                return NotFound(result);
+            return BadRequest(result);
+        }
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -174,13 +279,16 @@ public class UsersController : ControllerBase
     [HttpPatch("{id}/status")]
     [HasPermission(Permissions.Users.Update)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateStatus(string id, [FromBody] UpdateUserStatusRequestDto request)
     {
         var result = await _userService.UpdateUserStatusAsync(id, request.IsActive);
         if (!result.Success)
         {
-            return NotFound(result);
+            if (result.Message == "User not found.")
+                return NotFound(result);
+            return BadRequest(result);
         }
 
         return Ok(result);

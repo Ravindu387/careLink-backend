@@ -1,11 +1,12 @@
 namespace CareLink.API.Controllers;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CareLink.Application.DTOs;
 using CareLink.Application.Interfaces;
 
 [ApiController]
-[Route("api/[controller]")]
+[Authorize]
 [Route("api/suppliers")]
 public class SuppliersController : ControllerBase
 {

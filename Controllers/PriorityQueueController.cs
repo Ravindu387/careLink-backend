@@ -1,11 +1,13 @@
-﻿using CareLink.Backend.Models;
+using CareLink.Backend.Models;
 using CareLink.Backend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CareLink.Backend.Controllers;
 
 [ApiController]
-[Route("api/priority-queue")]
+[Authorize]
+[Route("api/case-manager/priority-queue")]
 public class PriorityQueueController : ControllerBase
 {
     private readonly IPriorityQueueService _priorityQueueService;

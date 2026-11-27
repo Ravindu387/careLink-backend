@@ -86,8 +86,7 @@ public class ShelterRepository : IShelterRepository
         var code = $"SH-{id:D3}";
         return await _context.Shelters
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == idStr || s.Id == code, cancellationToken)
-            ?? await _context.Shelters.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(s => s.Id == idStr || s.Id == code, cancellationToken);
     }
 
     public async Task<Shelter> AddAsync(Shelter shelter, CancellationToken cancellationToken = default)
@@ -300,4 +299,120 @@ public class ShelterRepository : IShelterRepository
 
         return (registered, operational, nearCapacity, maintenance);
     }
+
+    #region Citizen Portal & Extended Shelter Management
+
+    private static readonly List<ShelterBooking> _bookings = new();
+    private static readonly object _bookingLock = new();
+    private static int _bookingCounter = 1001;
+
+    public async Task<IEnumerable<Shelter>> GetSheltersAsync(
+        string? search = null,
+        string? area = null,
+        double? maxDistance = null,
+        string? availability = null,
+        bool? accessibleOnly = null,
+        string? service = null)
+    {
+        var query = _context.Shelters.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(s =>
+                s.Name.ToLower().Contains(term) ||
+                s.Location.ToLower().Contains(term) ||
+                s.District.ToLower().Contains(term) ||
+                s.Address.ToLower().Contains(term));
+        }
+
+        if (!string.IsNullOrWhiteSpace(area) && !area.Equals("All", StringComparison.OrdinalIgnoreCase) && !area.Equals("All areas", StringComparison.OrdinalIgnoreCase))
+        {
+            var a = area.Trim().ToLower();
+            query = query.Where(s => s.Location.ToLower() == a || s.District.ToLower() == a);
+        }
+
+        if (maxDistance.HasValue)
+        {
+            query = query.Where(s => s.Distance <= maxDistance.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(availability) && !availability.Equals("All statuses", StringComparison.OrdinalIgnoreCase))
+        {
+            var av = availability.Trim().ToLower();
+            query = query.Where(s => s.Status.ToLower() == av);
+        }
+
+        if (accessibleOnly == true)
+        {
+            query = query.Where(s => s.Accessible);
+        }
+
+        var results = await query.ToListAsync();
+
+        if (!string.IsNullOrWhiteSpace(service) && !service.Equals("All services", StringComparison.OrdinalIgnoreCase))
+        {
+            var svcLower = service.Trim().ToLowerInvariant();
+            results = results.Where(s => s.Services.Any(sv => sv.ToLowerInvariant().Contains(svcLower))).ToList();
+        }
+
+        return results.OrderBy(s => s.Distance);
+    }
+
+    public Task<Shelter> CreateAsync(Shelter shelter)
+    {
+        return AddAsync(shelter);
+    }
+
+    public Task<Shelter?> UpdateAsync(string id, Shelter shelter)
+    {
+        shelter.Id = id;
+        return UpdateAsync(shelter);
+    }
+
+    public async Task<ShelterBooking> CreateBookingAsync(ShelterBooking booking)
+    {
+        lock (_bookingLock)
+        {
+            if (string.IsNullOrWhiteSpace(booking.Id))
+            {
+                booking.Id = $"SH-RES-{_bookingCounter++}";
+            }
+            booking.BookedAt = DateTime.UtcNow;
+            _bookings.Add(booking);
+        }
+
+        var shelter = await _context.Shelters.FirstOrDefaultAsync(s => s.Id == booking.ShelterId);
+        if (shelter == null && int.TryParse(booking.ShelterId, out var num))
+        {
+            var code = $"SH-{num:D3}";
+            shelter = await _context.Shelters.FirstOrDefaultAsync(s => s.Id == code);
+        }
+
+        if (shelter != null)
+        {
+            shelter.CurrentOccupancy = Math.Min(shelter.Capacity, shelter.CurrentOccupancy + booking.NumberOfPeople);
+            shelter.Status = shelter.Remaining > 0 ? "Space available" : "Full";
+            shelter.UpdatedAt = DateTimeOffset.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+
+        return booking;
+    }
+
+    public Task<IEnumerable<ShelterBooking>> GetBookingsAsync(string? citizenName = null)
+    {
+        lock (_bookingLock)
+        {
+            var query = _bookings.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(citizenName))
+            {
+                query = query.Where(b => b.CitizenName.Equals(citizenName.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            return Task.FromResult<IEnumerable<ShelterBooking>>(query.OrderByDescending(b => b.BookedAt).ToList());
+        }
+    }
+
+    #endregion
 }

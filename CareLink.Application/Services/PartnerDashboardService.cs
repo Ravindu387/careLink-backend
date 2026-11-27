@@ -70,11 +70,19 @@ public class PartnerDashboardService : IPartnerDashboardService
             })
             .ToList();
 
+        var orgName = !string.IsNullOrWhiteSpace(partnerId) && !partnerId.Equals("Global Relief Network", StringComparison.OrdinalIgnoreCase)
+            ? partnerId.Trim()
+            : data.Organisation.Name;
+
+        var orgCode = !string.IsNullOrWhiteSpace(partnerId) && !partnerId.Equals("Global Relief Network", StringComparison.OrdinalIgnoreCase)
+            ? $"ORG-{(uint)Math.Abs(partnerId.GetHashCode()) % 900 + 100}"
+            : data.Organisation.Code;
+
         var org = new PartnerDashboardOrgDto
         {
-            Name = data.Organisation.Name,
+            Name = orgName,
             Type = data.Organisation.Type,
-            Code = data.Organisation.Code,
+            Code = orgCode,
             VerificationStatus = data.Organisation.VerificationStatus,
             AssignedRegion = data.Organisation.AssignedRegion,
             FieldLocationsCount = data.Organisation.FieldLocationsCount,

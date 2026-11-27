@@ -12,8 +12,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/reports")]
-[Route("api/[controller]")]
 public class ReportsController : ControllerBase
 {
     private readonly IReportService _reportService;
@@ -43,12 +43,23 @@ public class ReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves a single report by integer ID (Oshadi).
+    /// Retrieves a single report by integer ID or generates a detailed report by string reportId.
     /// </summary>
-    [HttpGet("{id:int}")]
-    public async Task<IActionResult> GetById(int id)
+    [HttpGet("{reportId}")]
+    public async Task<IActionResult> GetOrGenerateReport(string reportId, [FromQuery] ReportFilterDto filter)
     {
-        var result = await _reportService.GetReportByIdAsync(id);
+        if (int.TryParse(reportId, out var intId))
+        {
+            var resultById = await _reportService.GetReportByIdAsync(intId);
+            if (!resultById.Success)
+            {
+                return NotFound(resultById);
+            }
+            return Ok(resultById);
+        }
+
+        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "System Administrator";
+        var result = await _reportService.GenerateReportAsync(reportId, filter, actor);
         if (!result.Success)
         {
             return NotFound(result);
@@ -67,7 +78,7 @@ public class ReportsController : ControllerBase
         {
             return BadRequest(result);
         }
-        return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
+        return CreatedAtAction(nameof(GetOrGenerateReport), new { reportId = result.Data!.Id.ToString() }, result);
     }
 
     /// <summary>
@@ -180,23 +191,6 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> GetCatalog()
     {
         var result = await _reportService.GetCatalogAsync();
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Generate a detailed report with column schemas, structured preview records, and key performance metrics.
-    /// </summary>
-    [HttpGet("{reportId}")]
-    [ProducesResponseType(typeof(ApiResponse<ReportDetailDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<ReportDetailDto>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GenerateReport(string reportId, [FromQuery] ReportFilterDto filter)
-    {
-        var actor = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue(ClaimTypes.Email) ?? "System Administrator";
-        var result = await _reportService.GenerateReportAsync(reportId, filter, actor);
-        if (!result.Success)
-        {
-            return NotFound(result);
-        }
         return Ok(result);
     }
 

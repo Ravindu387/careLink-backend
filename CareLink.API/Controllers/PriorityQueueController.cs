@@ -1,12 +1,15 @@
 using CareLink.Application.DTOs;
 using CareLink.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/priority-queue")]
 [Route("api/priorityqueue")]
+[Route("api/coordinator/priority-queue")]
 public class PriorityQueueController : ControllerBase
 {
     private readonly IPriorityQueueService _service;
