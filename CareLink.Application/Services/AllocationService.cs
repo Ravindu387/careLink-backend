@@ -8,10 +8,14 @@ using CareLink.Core.Entities;
 public class AllocationService : IAllocationService
 {
     private readonly IAllocationRepository _repository;
+    private readonly IInventoryRepository? _inventoryRepository;
 
-    public AllocationService(IAllocationRepository repository)
+    public AllocationService(
+        IAllocationRepository repository,
+        IInventoryRepository? inventoryRepository = null)
     {
         _repository = repository;
+        _inventoryRepository = inventoryRepository;
     }
 
     public async Task<ApiResponse<IEnumerable<AllocationDto>>> GetAllocationsAsync(
@@ -114,6 +118,42 @@ public class AllocationService : IAllocationService
             string.IsNullOrWhiteSpace(request.Destination))
         {
             return ApiResponse<AllocationDto>.ErrorResponse("Request ID, Resource, Quantity and Destination are required");
+        }
+
+        var qtyMatch = System.Text.RegularExpressions.Regex.Match(request.Quantity.Trim(), @"-?\d+");
+        int requestedQty = 0;
+        if (qtyMatch.Success && int.TryParse(qtyMatch.Value, out requestedQty))
+        {
+            if (requestedQty <= 0)
+            {
+                return ApiResponse<AllocationDto>.ErrorResponse("Allocation quantity must be greater than zero.");
+            }
+        }
+        else if (request.Quantity.Trim().StartsWith("-"))
+        {
+            return ApiResponse<AllocationDto>.ErrorResponse("Allocation quantity cannot be negative.");
+        }
+
+        if (_inventoryRepository != null && requestedQty > 0)
+        {
+            var resTerm = request.Resource.Trim();
+            var allInventory = await _inventoryRepository.GetAllAsync();
+            var matchedInventory = allInventory.FirstOrDefault(i =>
+                i.Id.Equals(resTerm, StringComparison.OrdinalIgnoreCase) ||
+                i.Resource.Equals(resTerm, StringComparison.OrdinalIgnoreCase) ||
+                i.Resource.Contains(resTerm, StringComparison.OrdinalIgnoreCase) ||
+                resTerm.Contains(i.Resource, StringComparison.OrdinalIgnoreCase));
+
+            if (matchedInventory != null)
+            {
+                if (requestedQty > matchedInventory.Available)
+                {
+                    return ApiResponse<AllocationDto>.ErrorResponse(
+                        $"Insufficient available stock for '{matchedInventory.Resource}'. Requested: {requestedQty}, Available: {matchedInventory.Available} {matchedInventory.Unit}.");
+                }
+
+                await _inventoryRepository.AdjustStockAsync(matchedInventory.Id, -requestedQty);
+            }
         }
 
         var newAllocation = new Allocation
