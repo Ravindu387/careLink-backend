@@ -18,6 +18,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddUserSecrets<Program>(optional: true, reloadOnChange: true);
+builder.Configuration.AddEnvironmentVariables();
 
 // 1. Configure Database Connection (SQL Server for ASP.NET Core Identity)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -67,6 +70,25 @@ builder.Services.AddAuthentication(options =>
     };
     options.Events = new JwtBearerEvents
     {
+        OnTokenValidated = async context =>
+        {
+            var userId = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!string.IsNullOrEmpty(userId))
+            {
+                var userManager = context.HttpContext.RequestServices.GetService<UserManager<ApplicationUser>>();
+                if (userManager != null)
+                {
+                    var dbUser = await userManager.FindByIdAsync(userId);
+                    if (dbUser != null &&
+                        (!dbUser.IsActive ||
+                         dbUser.RequiresPasswordSetup ||
+                         !string.Equals(dbUser.AccountStatus, AccountStatuses.Active, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        context.Fail("Account is not active or is pending administrator approval.");
+                    }
+                }
+            }
+        },
         OnChallenge = context =>
         {
             context.HandleResponse();
@@ -123,8 +145,13 @@ builder.Services.AddSingleton<IIntegrationHealthService, IntegrationHealthServic
 builder.Services.AddScoped<IAiRecommendationRepository, AiRecommendationRepository>();
 builder.Services.AddScoped<IAiRecommendationService, AiRecommendationService>();
 
+// CareLink AI Assistant Chatbot (Gemini-powered for Citizen & Volunteer roles)
+builder.Services.AddScoped<IChatbotRepository, ChatbotRepository>();
+builder.Services.AddScoped<IChatbotService, ChatbotService>();
+
 builder.Services.AddSingleton<ISecurityEventService, SecurityEventService>();
 builder.Services.AddSingleton<IAuditLogService, AuditLogService>();
+builder.Services.AddSingleton<IOrganizationDocumentStorageService, OrganizationDocumentStorageService>();
 builder.Services.AddSingleton<IVerificationService, VerificationService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IOrganizationService, OrganizationService>();
@@ -173,6 +200,33 @@ builder.Services.AddScoped<ICitizenRequestService, CitizenRequestService>();
 builder.Services.AddSingleton<ISafetyUpdateRepository, InMemorySafetyUpdateRepository>();
 builder.Services.AddScoped<ISafetyUpdateService, SafetyUpdateService>();
 builder.Services.AddSingleton<CareLink.Application.Interfaces.IShelterRepository, InMemoryShelterRepository>();
+
+// 5b. Register Case Manager, Volunteer Coordinator & Shelter Reports Services (CareLink.Backend)
+builder.Services.AddSingleton<CareLink.Backend.Services.ICaseManagementService, CareLink.Backend.Services.CaseManagementService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.ICaseReportsService, CareLink.Backend.Services.CaseReportsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.ICaseVerificationService, CareLink.Backend.Services.CaseVerificationService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IEscalatedCasesService, CareLink.Backend.Services.EscalatedCasesService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IMyCasesService, CareLink.Backend.Services.MyCasesService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.INotificationsService, CareLink.Backend.Services.NotificationsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IDuplicatesService, CareLink.Backend.Services.DuplicatesService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IPriorityQueueService, CareLink.Backend.Services.PriorityQueueService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IRequestHistoryService, CareLink.Backend.Services.RequestHistoryService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.ICaseManagerSettingsService, CareLink.Backend.Services.CaseManagerSettingsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IUnassignedCasesService, CareLink.Backend.Services.UnassignedCasesService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IActivityTrackingService, CareLink.Backend.Services.ActivityTrackingService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IAIVolunteerMatchingService, CareLink.Backend.Services.AIVolunteerMatchingService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IAssignmentsService, CareLink.Backend.Services.AssignmentsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.ICommunicationsService, CareLink.Backend.Services.CommunicationsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IVolunteerNotificationsService, CareLink.Backend.Services.VolunteerNotificationsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IVolunteerVerificationsService, CareLink.Backend.Services.VolunteerVerificationsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IVolunteerReportsService, CareLink.Backend.Services.VolunteerReportsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IShelterReportsService, CareLink.Backend.Services.ShelterReportsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IVolunteerSettingsService, CareLink.Backend.Services.VolunteerSettingsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.ISkillsAvailabilityService, CareLink.Backend.Services.SkillsAvailabilityService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IVolunteerTasksService, CareLink.Backend.Services.VolunteerTasksService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.ITrainingCertificationsService, CareLink.Backend.Services.TrainingCertificationsService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IVolunteerDashboardService, CareLink.Backend.Services.VolunteerDashboardService>();
+builder.Services.AddSingleton<CareLink.Backend.Services.IVolunteerDirectoryService, CareLink.Backend.Services.VolunteerDirectoryService>();
 
 // 6. Register Controllers & OpenAPI Documentation
 builder.Services.AddControllers();
@@ -258,3 +312,5 @@ app.MapGet("/api/health", () =>
 });
 
 app.Run();
+
+public partial class Program { }
