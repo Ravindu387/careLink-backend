@@ -10,8 +10,11 @@ public interface IUserService
     Task<ApiResponse<UserDetailsDto>> GetUserByIdAsync(string id);
     Task<ApiResponse<UserStatsDto>> GetUserStatsAsync();
     Task<ApiResponse<UserDetailsDto>> CreateUserAsync(CreateUserRequestDto request);
+    Task<ApiResponse<UserDetailsDto>> ResendInvitationAsync(string id);
     Task<ApiResponse<UserDetailsDto>> UpdateUserAsync(string id, UpdateUserRequestDto request);
     Task<ApiResponse<bool>> UpdateUserStatusAsync(string id, bool isActive);
+    Task<ApiResponse<UserDetailsDto>> ApprovePartnerAsync(string id, string? notes = null, string? approvedBy = null);
+    Task<ApiResponse<UserDetailsDto>> RejectPartnerAsync(string id, string? reason = null, string? reviewedBy = null);
     Task<ApiResponse<bool>> DeleteUserAsync(string id);
     Task<ApiResponse<bool>> UpdateUserRolesAsync(string userId, UpdateUserRolesRequestDto request);
     Task<ApiResponse<IReadOnlyList<string>>> GetUserPermissionsAsync(string userId);
