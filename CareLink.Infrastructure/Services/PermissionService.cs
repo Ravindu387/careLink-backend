@@ -55,7 +55,10 @@ public class PermissionService : IPermissionService
         }
 
         var user = await _userManager.FindByIdAsync(userId);
-        if (user == null || !user.IsActive)
+        if (user == null ||
+            !user.IsActive ||
+            user.RequiresPasswordSetup ||
+            !string.Equals(user.AccountStatus, AccountStatuses.Active, StringComparison.OrdinalIgnoreCase))
         {
             return Array.Empty<string>();
         }

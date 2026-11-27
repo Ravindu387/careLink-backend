@@ -73,8 +73,12 @@ public class RoleService : IRoleService
             {
                 UserRoles.Admin => "Full platform administrator with unrestricted operational authority",
                 UserRoles.SystemAdmin => "Core system administration, security, and infrastructure configuration",
+                UserRoles.CaseManager => "Assistance request verification, priority triage, and case lifecycle management",
                 UserRoles.EmergencyCoordinator => "Cross-sector crisis response, triage coordination, and emergency tasking",
+                UserRoles.FundingOfficer => "Financial aid campaigns, donation oversight, and expenditure governance",
                 UserRoles.PartnerOfficer => "Partner NGO/agency coordination, resource deployment, and verification",
+                UserRoles.ResourceManager => "Supply chain logistics, warehouse inventory, and resource distribution",
+                UserRoles.ShelterAdministrator => "Shelter site operations, bed allocations, and evacuee tracking",
                 UserRoles.Volunteer => "Field engagement, operational execution, and frontline task completion",
                 UserRoles.Citizen => "Public portal access, crisis self-reporting, and community shelter discovery",
                 UserRoles.IncidentManager => "Crisis incident escalation, spatial dispatch, and field management",
