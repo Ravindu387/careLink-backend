@@ -27,4 +27,13 @@ public interface IGeminiService
         string prompt,
         string? systemInstruction = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Generates a conversational chat response supporting multi-turn history and system instructions.
+    /// </summary>
+    Task<string> GenerateChatMessageAsync(
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage,
+        string? systemInstruction = null,
+        CancellationToken cancellationToken = default);
 }
