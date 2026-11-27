@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 namespace CareLink.API.Controllers;
 
 using System.Text;
@@ -6,6 +7,7 @@ using CareLink.Application.DTOs;
 using CareLink.Application.Interfaces;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class DispatchesController : ControllerBase
 {
