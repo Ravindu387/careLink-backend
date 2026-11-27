@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using CareLink.Application.DTOs;
 using CareLink.Application.Interfaces;
 using CareLink.Core.Models;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/staff")]
 public class StaffController : ControllerBase
 {

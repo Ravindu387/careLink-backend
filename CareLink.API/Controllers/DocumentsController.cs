@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using System.Text;
 using System.Text.Json;
 using CareLink.Application.Common;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/documents")]
 [Route("api/partner/documents")]
 [Route("api/citizen/documents")]
