@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using CareLink.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/funding-dashboard")]
 public class FundingDashboardController : ControllerBase
 {
