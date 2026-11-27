@@ -86,8 +86,7 @@ public class ShelterRepository : IShelterRepository
         var code = $"SH-{id:D3}";
         return await _context.Shelters
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == idStr || s.Id == code, cancellationToken)
-            ?? await _context.Shelters.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(s => s.Id == idStr || s.Id == code, cancellationToken);
     }
 
     public async Task<Shelter> AddAsync(Shelter shelter, CancellationToken cancellationToken = default)
