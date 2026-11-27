@@ -11,7 +11,7 @@ namespace CareLink.API.Controllers;
 
 [ApiController]
 [Route("api/verification")]
-[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.IncidentManager}")]
+[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.CaseManager},{UserRoles.IncidentManager}")]
 public class VerificationController : ControllerBase
 {
     private readonly IVerificationService _verificationService;
