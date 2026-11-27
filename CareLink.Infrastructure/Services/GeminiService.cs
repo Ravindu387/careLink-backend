@@ -187,6 +187,121 @@ public class GeminiService : IGeminiService
         }
     }
 
+    public async Task<string> GenerateChatMessageAsync(
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage,
+        string? systemInstruction = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!IsConfigured)
+        {
+            throw new InvalidOperationException(
+                "Google Gemini API key is not configured. Please configure 'Gemini:ApiKey' in appsettings.json or via the 'Gemini__ApiKey' environment variable.");
+        }
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(10, _options.TimeoutSeconds)));
+
+        var url = $"{_options.BaseUrl.TrimEnd('/')}/models/{_options.Model}:generateContent?key={_apiKey}";
+
+        var contentsList = new List<object>();
+
+        if (conversationHistory != null)
+        {
+            foreach (var (role, messageText) in conversationHistory)
+            {
+                if (string.IsNullOrWhiteSpace(messageText)) continue;
+                var geminiRole = string.Equals(role, "model", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(role, "assistant", StringComparison.OrdinalIgnoreCase)
+                    ? "model"
+                    : "user";
+
+                contentsList.Add(new
+                {
+                    role = geminiRole,
+                    parts = new[] { new { text = messageText } }
+                });
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(userMessage))
+        {
+            contentsList.Add(new
+            {
+                role = "user",
+                parts = new[] { new { text = userMessage } }
+            });
+        }
+
+        if (contentsList.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var requestBody = new
+        {
+            contents = contentsList,
+            systemInstruction = !string.IsNullOrWhiteSpace(systemInstruction)
+                ? new
+                {
+                    parts = new[]
+                    {
+                        new { text = systemInstruction }
+                    }
+                }
+                : null,
+            generationConfig = new
+            {
+                temperature = 0.4,
+                topK = 40,
+                topP = 0.95,
+                maxOutputTokens = 2048
+            }
+        };
+
+        var json = JsonSerializer.Serialize(requestBody, JsonOptions);
+        using var requestPayload = new StringContent(json, Encoding.UTF8, "application/json");
+
+        try
+        {
+            using var response = await _httpClient.PostAsync(url, requestPayload, cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cts.Token);
+                HandleGeminiError(response.StatusCode, errorBody);
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync(cts.Token);
+            using var doc = JsonDocument.Parse(responseJson);
+
+            if (doc.RootElement.TryGetProperty("candidates", out var candidates) &&
+                candidates.GetArrayLength() > 0 &&
+                candidates[0].TryGetProperty("content", out var candidateContent) &&
+                candidateContent.TryGetProperty("parts", out var parts) &&
+                parts.GetArrayLength() > 0 &&
+                parts[0].TryGetProperty("text", out var textElem))
+            {
+                return textElem.GetString() ?? string.Empty;
+            }
+
+            _logger.LogWarning("Gemini API chat call returned response without text candidate parts.");
+            return string.Empty;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError("Gemini API chat call timed out after {Seconds} seconds.", _options.TimeoutSeconds);
+            throw new TimeoutException($"Gemini AI generation timed out after {_options.TimeoutSeconds} seconds.");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error communicating with Gemini API during chat.");
+            throw new InvalidOperationException("Failed to reach Google Gemini API. Please verify network connectivity.", ex);
+        }
+    }
+
     private void HandleGeminiError(HttpStatusCode statusCode, string errorBody)
     {
         _logger.LogError("Gemini API error (Status: {StatusCode}): {Error}", statusCode, errorBody);
