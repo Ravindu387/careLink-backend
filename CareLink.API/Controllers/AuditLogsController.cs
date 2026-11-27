@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/audit-logs")]
 [Route("api/auditlogs")]
 public class AuditLogsController : ControllerBase
