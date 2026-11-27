@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using CareLink.Backend.Models;
 
 namespace CareLink.Backend.Services;
@@ -294,6 +294,22 @@ public class MyCasesService : IMyCasesService
 
             _cases.Insert(0, newCase);
             return Task.FromResult(newCase);
+        }
+    }
+
+    public void UpsertExternalCase(MyCaseItem item)
+    {
+        lock (_lock)
+        {
+            var existingIdx = _cases.FindIndex(c => c.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase));
+            if (existingIdx >= 0)
+            {
+                _cases[existingIdx] = item;
+            }
+            else
+            {
+                _cases.Insert(0, item);
+            }
         }
     }
 
