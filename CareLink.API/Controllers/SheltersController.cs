@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using CareLink.Application.Common;
 using CareLink.Application.DTOs;
 using CareLink.Application.Interfaces;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CareLink.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/shelters")]
 [Route("api/shelter-overview")]
 [Route("api/citizen/shelters")]
@@ -179,6 +181,16 @@ public class SheltersController : ControllerBase
             return BadRequest(ModelState);
         }
 
+        if (dto.Capacity <= 0)
+        {
+            return BadRequest(new { message = "Shelter capacity must be greater than zero." });
+        }
+
+        if (dto.Occupied < 0 || dto.Occupied > dto.Capacity)
+        {
+            return BadRequest(new { message = $"Initial occupancy ({dto.Occupied}) cannot be negative or exceed shelter capacity ({dto.Capacity})." });
+        }
+
         try
         {
             var created = await _shelterService.CreateAsync(dto, cancellationToken);
@@ -229,7 +241,17 @@ public class SheltersController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        int intId = int.TryParse(id, out var parsed) ? parsed : 0;
+        if (dto.Capacity <= 0)
+        {
+            return BadRequest(new { message = "Shelter capacity must be greater than zero." });
+        }
+
+        if (dto.Occupied < 0 || dto.Occupied > dto.Capacity)
+        {
+            return BadRequest(new { message = $"Initial occupancy ({dto.Occupied}) cannot be negative or exceed shelter capacity ({dto.Capacity})." });
+        }
+
+        int intId = ExtractNumericShelterId(id);
         var updated = await _shelterService.UpdateAsync(intId, dto, cancellationToken);
         if (updated == null)
         {
@@ -243,12 +265,12 @@ public class SheltersController : ControllerBase
     /// <summary>
     /// Updates occupancy headcount for quick arrivals and check-ins/check-outs.
     /// </summary>
-    [HttpPatch("{id:int}/occupancy")]
+    [HttpPatch("{id}/occupancy")]
     [ProducesResponseType(typeof(ShelterDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ShelterDto>> UpdateOccupancy(
-        int id,
+        string id,
         [FromBody] UpdateShelterOccupancyDto dto,
         CancellationToken cancellationToken)
     {
@@ -257,7 +279,20 @@ public class SheltersController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        var updated = await _shelterService.UpdateOccupancyAsync(id, dto.Occupied, cancellationToken);
+        var intId = ExtractNumericShelterId(id);
+        var existing = await _shelterService.GetByIdAsync(intId, cancellationToken)
+                       ?? await _shelterService.GetShelterByIdAsync(id, cancellationToken);
+        if (existing == null)
+        {
+            return NotFound(new { message = $"Shelter '{id}' not found." });
+        }
+
+        if (dto.Occupied < 0 || dto.Occupied > existing.Capacity)
+        {
+            return BadRequest(new { message = $"Occupancy ({dto.Occupied}) cannot be negative or exceed shelter capacity ({existing.Capacity})." });
+        }
+
+        var updated = await _shelterService.UpdateOccupancyAsync(intId, dto.Occupied, cancellationToken);
         if (updated == null)
         {
             return NotFound(new { message = $"Shelter '{id}' not found." });
@@ -285,17 +320,8 @@ public class SheltersController : ControllerBase
             return Ok(res);
         }
 
-        bool deleted;
-        if (int.TryParse(id, out var intId))
-        {
-            deleted = await _shelterService.DeleteAsync(intId, cancellationToken);
-        }
-        else
-        {
-            // fallback lookup by ID
-            var shelter = await _shelterService.GetShelterByIdAsync(id, cancellationToken);
-            deleted = shelter != null && await _shelterService.DeleteAsync(0, cancellationToken);
-        }
+        var intId = ExtractNumericShelterId(id);
+        bool deleted = intId > 0 && await _shelterService.DeleteAsync(intId, cancellationToken);
 
         if (!deleted)
         {
@@ -304,6 +330,15 @@ public class SheltersController : ControllerBase
 
         _logger.LogInformation("Shelter '{Id}' deleted.", id);
         return Ok(new { message = "Shelter removed successfully.", id });
+    }
+
+    private static int ExtractNumericShelterId(string id)
+    {
+        if (int.TryParse(id, out var parsed))
+            return parsed;
+
+        var digits = new string(id.Where(char.IsDigit).ToArray());
+        return int.TryParse(digits, out var extracted) ? extracted : 0;
     }
 
     /// <summary>
