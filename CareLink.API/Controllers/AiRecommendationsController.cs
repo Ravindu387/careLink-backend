@@ -11,7 +11,7 @@ namespace CareLink.API.Controllers;
 [ApiController]
 [Route("api/ai-recommendations")]
 [Route("api/ai")]
-[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.IncidentManager},{UserRoles.VolunteerCoordinator}")]
+[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.CaseManager},{UserRoles.IncidentManager},{UserRoles.VolunteerCoordinator}")]
 public class AiRecommendationsController : ControllerBase
 {
     private readonly IAiRecommendationService _service;
