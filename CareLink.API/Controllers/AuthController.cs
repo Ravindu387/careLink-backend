@@ -21,8 +21,8 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Register a new user account and triggers email confirmation link delivery.
-    /// Does not issue an authentication JWT until email verification is complete.
+    /// Public self-registration for Citizen, Volunteer, and Partner Organization accounts.
+    /// Citizens and Volunteers become active immediately; Partner Organizations enter PendingApproval status.
     /// </summary>
     [HttpPost("register")]
     [AllowAnonymous]
@@ -50,13 +50,14 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Authenticate an existing user and generate a JWT bearer token.
-    /// Requires that the user's email has been verified.
+    /// Authenticate an existing user using email and password and generate a JWT bearer token.
+    /// Enforces AccountStatus (Active vs PendingApproval, Rejected, Disabled) and password setup requirements.
     /// </summary>
     [HttpPost("login")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
     {
         if (!ModelState.IsValid)
@@ -72,6 +73,15 @@ public class AuthController : ControllerBase
         var result = await _authService.LoginAsync(request);
         if (!result.Success)
         {
+            if (result.Errors != null &&
+                (result.Errors.Contains("ACCOUNT_PENDING_APPROVAL") ||
+                 result.Errors.Contains("ACCOUNT_REJECTED") ||
+                 result.Errors.Contains("ACCOUNT_DISABLED") ||
+                 result.Errors.Contains("PASSWORD_SETUP_REQUIRED")))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+
             return Unauthorized(result);
         }
 
@@ -79,8 +89,81 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Submit additional verification information requested by an Administrator for a pending Partner Organisation.
+    /// </summary>
+    [HttpPost("partner-additional-info")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SubmitPartnerAdditionalInfo([FromBody] PartnerAdditionalInfoSubmissionDto request)
+    {
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage)
+                .ToList();
+
+            return BadRequest(ApiResponse<bool>.FailureResult("Validation failed.", errors));
+        }
+
+        var result = await _authService.SubmitPartnerAdditionalInfoAsync(request);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Validate an account activation / password setup token for an Admin-created user.
+    /// </summary>
+    [HttpGet("verify-setup-token")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> VerifySetupToken([FromQuery] string email, [FromQuery] string token)
+    {
+        var result = await _authService.ValidateSetupTokenAsync(email, token);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Complete account setup and set password using a single-use token sent to an Admin-created user.
+    /// </summary>
+    [HttpPost("setup-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetupPassword([FromBody] SetupPasswordRequestDto request)
+    {
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage)
+                .ToList();
+
+            return BadRequest(ApiResponse<bool>.FailureResult("Validation failed.", errors));
+        }
+
+        var result = await _authService.SetupPasswordAsync(request);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Verify a user's email address using the URL confirmation token.
-    /// Supports both interactive browser requests (returns styled HTML) and API callers (returns JSON).
     /// </summary>
     [HttpGet("verify-email")]
     [AllowAnonymous]
@@ -90,7 +173,6 @@ public class AuthController : ControllerBase
     {
         var result = await _authService.VerifyEmailAsync(email, token);
 
-        // Content negotiation: Return styled HTML if requested by a web browser directly
         var isHtmlPreferred = Request.Headers.Accept.ToString().Contains("text/html");
 
         if (result.Success)
@@ -149,6 +231,7 @@ public class AuthController : ControllerBase
     [Authorize]
     [ProducesResponseType(typeof(ApiResponse<UserDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetCurrentUser()
     {
@@ -161,6 +244,10 @@ public class AuthController : ControllerBase
         var result = await _authService.GetCurrentUserAsync(userId);
         if (!result.Success)
         {
+            if (result.Message.Contains("not active", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
             return NotFound(result);
         }
 
@@ -168,12 +255,23 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Get the list of all valid platform user roles for registration or role assignment.
+    /// Get the list of all valid platform user roles.
     /// </summary>
     [HttpGet("roles")]
     public IActionResult GetAvailableRoles()
     {
         return Ok(ApiResponse<IReadOnlyList<string>>.SuccessResult(
             UserRoles.AllRoles, "Available platform roles retrieved successfully."));
+    }
+
+    /// <summary>
+    /// Get the list of roles permitted for public self-registration.
+    /// </summary>
+    [HttpGet("public-roles")]
+    [AllowAnonymous]
+    public IActionResult GetPublicRegistrationRoles()
+    {
+        return Ok(ApiResponse<IReadOnlyList<string>>.SuccessResult(
+            UserRoles.PublicRegistrationRoles, "Public registration roles retrieved successfully."));
     }
 }
