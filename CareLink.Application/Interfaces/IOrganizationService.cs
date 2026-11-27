@@ -13,6 +13,8 @@ public interface IOrganizationService
     Task<ApiResponse<OrganizationDto>> UpdateOrganizationAsync(Guid id, UpdateOrganizationRequestDto request, string actor);
     Task<ApiResponse<bool>> UpdateStatusAsync(Guid id, string status, string actor);
     Task<ApiResponse<bool>> ApproveVerificationAsync(Guid id, string actor);
+    Task<ApiResponse<OrganizationDto>> ReviewOrganizationAsync(Guid id, OrganizationReviewDecisionRequestDto request, string actor);
+    Task<(byte[] Content, string ContentType, string FileName)?> GetDocumentForDownloadAsync(Guid organizationId, Guid documentId);
     Task<ApiResponse<bool>> DeleteOrganizationAsync(Guid id, string actor);
     Task<ApiResponse<IReadOnlyList<string>>> GetOrganizationTypesAsync();
 }
