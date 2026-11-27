@@ -6,15 +6,30 @@ namespace CareLink.Application.Interfaces;
 public interface IAuthService
 {
     /// <summary>
-    /// Registers a new user account, marks email as unconfirmed, generates confirmation token,
-    /// and triggers verification email delivery. Does NOT issue an authentication JWT.
+    /// Registers a new Citizen, Volunteer, or Partner Organization account according to role rules.
+    /// Citizens and Volunteers become active immediately; Partner Organizations require Admin approval.
     /// </summary>
     Task<ApiResponse<RegisterResponseDto>> RegisterAsync(RegisterRequestDto request);
 
     /// <summary>
-    /// Authenticates an existing user and generates a JWT access token only if EmailConfirmed is true.
+    /// Authenticates an existing user using email and password, validating AccountStatus and IsActive.
     /// </summary>
     Task<ApiResponse<AuthResponseDto>> LoginAsync(LoginRequestDto request);
+
+    /// <summary>
+    /// Allows a pending Partner Organization representative to submit additional information requested by an Administrator.
+    /// </summary>
+    Task<ApiResponse<bool>> SubmitPartnerAdditionalInfoAsync(PartnerAdditionalInfoSubmissionDto request);
+
+    /// <summary>
+    /// Completes account setup and sets password for an Admin-created user using a single-use token.
+    /// </summary>
+    Task<ApiResponse<bool>> SetupPasswordAsync(SetupPasswordRequestDto request);
+
+    /// <summary>
+    /// Validates whether a password setup token is valid, not expired, and has not been used.
+    /// </summary>
+    Task<ApiResponse<bool>> ValidateSetupTokenAsync(string email, string token);
 
     /// <summary>
     /// Retrieves user profile details by identifier.
@@ -28,7 +43,6 @@ public interface IAuthService
 
     /// <summary>
     /// Generates and sends a new confirmation token if the email is registered and unconfirmed.
-    /// Employs rate limiting and returns a generic response to prevent user enumeration.
     /// </summary>
     Task<ApiResponse<bool>> ResendVerificationEmailAsync(string email);
 }
