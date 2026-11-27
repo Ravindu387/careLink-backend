@@ -1,10 +1,12 @@
-﻿using CareLink.Backend.Models;
+using Microsoft.AspNetCore.Authorization;
+using CareLink.Backend.Models;
 using CareLink.Backend.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CareLink.Backend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/case-manager-settings")]
 public class CaseManagerSettingsController : ControllerBase
 {

@@ -1,10 +1,12 @@
-ï»¿using CareLink.Backend.Models;
+using Microsoft.AspNetCore.Authorization;
+using CareLink.Backend.Models;
 using CareLink.Backend.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CareLink.Backend.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/casereports")]
 public class CaseReportsController : ControllerBase
 {
@@ -27,7 +29,7 @@ public class CaseReportsController : ControllerBase
         {
             var filters = new ReportsFilterDto
             {
-                DateRange = string.IsNullOrWhiteSpace(dateRange) ? "18â€“25 June 2025" : dateRange,
+                DateRange = string.IsNullOrWhiteSpace(dateRange) ? "18–25 June 2025" : dateRange,
                 CrisisEvent = string.IsNullOrWhiteSpace(crisisEvent) ? "Monsoon Floods 2025" : crisisEvent,
                 OperationalArea = string.IsNullOrWhiteSpace(operationalArea) ? "All areas" : operationalArea
             };
@@ -67,7 +69,7 @@ public class CaseReportsController : ControllerBase
         {
             var filters = new ReportsFilterDto
             {
-                DateRange = string.IsNullOrWhiteSpace(dateRange) ? "18â€“25 June 2025" : dateRange,
+                DateRange = string.IsNullOrWhiteSpace(dateRange) ? "18–25 June 2025" : dateRange,
                 CrisisEvent = string.IsNullOrWhiteSpace(crisisEvent) ? "Monsoon Floods 2025" : crisisEvent,
                 OperationalArea = string.IsNullOrWhiteSpace(operationalArea) ? "All areas" : operationalArea
             };
