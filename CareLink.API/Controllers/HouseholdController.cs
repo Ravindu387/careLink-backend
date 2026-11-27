@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 namespace CareLink.API.Controllers;
 
 using Microsoft.AspNetCore.Mvc;
@@ -5,6 +6,7 @@ using CareLink.Application.DTOs;
 using CareLink.Application.Interfaces;
 
 [ApiController]
+[Authorize]
 [Route("api/household")]
 [Route("api/citizen/household")]
 public class HouseholdController : ControllerBase
