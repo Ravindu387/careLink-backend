@@ -11,7 +11,7 @@ namespace CareLink.API.Controllers;
 
 [ApiController]
 [Route("api/security-events")]
-[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.IncidentManager}")]
+[Authorize(Roles = $"{UserRoles.Admin},{UserRoles.SystemAdmin},{UserRoles.EmergencyCoordinator},{UserRoles.CaseManager},{UserRoles.IncidentManager}")]
 public class SecurityEventsController : ControllerBase
 {
     private readonly ISecurityEventService _securityEventService;
