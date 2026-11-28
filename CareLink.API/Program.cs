@@ -290,6 +290,12 @@ using (var scope = app.Services.CreateScope())
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "CareLink Humanitarian Crisis API v1");
+        options.RoutePrefix = "swagger";
+        options.DocumentTitle = "CareLink API Documentation";
+    });
 }
 
 app.UseCors("CareLinkFrontend");
